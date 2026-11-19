@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Maximize } from "lucide-react";
-import type { Project, Selection } from "../domain/model";
+import { interpolate, type Point3 } from "../domain/geometry";
+import type { Project, SelectedObject, Selection } from "../domain/model";
+import type { AnalysisResult } from "../solver/oofem";
+import { additiveSelection } from "./WorkPlaneView";
 
 interface SceneState {
   renderer: THREE.WebGLRenderer;
@@ -25,20 +28,36 @@ function disposeModel(group: THREE.Group) {
   });
   group.clear();
 }
+const scenePoint = (p: Point3) => new THREE.Vector3(p.x, p.z, -p.y);
+
 export default function SpatialView({
   project,
   selection,
+  result,
   onSelect,
 }: {
   project: Project;
-  selection: Selection;
-  onSelect: (s: Selection) => void;
+  selection: SelectedObject[];
+  result: AnalysisResult | null;
+  onSelect: (s: Selection, additive: boolean) => void;
 }) {
   const container = useRef<HTMLDivElement>(null),
     state = useRef<SceneState | null>(null);
   const select = useRef(onSelect);
   select.current = onSelect;
   const [error, setError] = useState(false);
+  const deformationScale = useMemo(() => {
+    if (!result) return 0;
+    const bounds = new THREE.Box3().setFromPoints(
+      project.nodes.map(scenePoint),
+    );
+    const span = bounds.getSize(new THREE.Vector3()).length();
+    let max = 0;
+    for (const stations of Object.values(result.members))
+      for (const s of stations)
+        max = Math.max(max, Math.hypot(s.ux, s.uy, s.uz));
+    return max > 1e-12 ? (Math.max(span, 1) * 0.14) / max : 1;
+  }, [project.nodes, result]);
   useEffect(() => {
     const el = container.current!;
     let renderer: THREE.WebGLRenderer;
@@ -68,6 +87,7 @@ export default function SpatialView({
     grid.position.y = -0.025;
     scene.add(grid);
     const axes = new THREE.AxesHelper(1.5);
+    axes.rotation.x = -Math.PI / 2;
     scene.add(axes);
     const render = () => renderer.render(scene, camera);
     const fit = () => {
@@ -115,6 +135,7 @@ export default function SpatialView({
       down = { x: e.clientX, y: e.clientY };
     };
     const pointerUp = (e: PointerEvent) => {
+      if (e.button !== 0) return;
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
       const r = renderer.domElement.getBoundingClientRect();
       ray.setFromCamera(
@@ -127,7 +148,10 @@ export default function SpatialView({
       const hit = ray
         .intersectObjects(model.children, true)
         .find((h) => h.object.userData.selection);
-      select.current(hit?.object.userData.selection ?? null);
+      select.current(
+        hit?.object.userData.selection ?? null,
+        additiveSelection(e),
+      );
     };
     el.addEventListener("pointerdown", pointerDown);
     el.addEventListener("pointerup", pointerUp);
@@ -152,26 +176,44 @@ export default function SpatialView({
     const s = state.current;
     if (!s) return;
     disposeModel(s.model);
+    const nodes = new Map(project.nodes.map((n) => [n.id, n]));
+    const selectedIds = new Set(
+      selection.map((item) => `${item.kind}:${item.id}`),
+    );
     for (const m of project.members) {
-      const a = project.nodes.find((n) => n.id === m.start)!,
-        b = project.nodes.find((n) => n.id === m.end)!;
+      const a = nodes.get(m.start)!,
+        b = nodes.get(m.end)!;
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(a.x, a.z, -a.y),
-          new THREE.Vector3(b.x, b.z, -b.y),
+          scenePoint(a),
+          scenePoint(b),
         ]),
         new THREE.LineBasicMaterial({
-          color:
-            selection?.kind === "member" && selection.id === m.id
-              ? "#d2b8ff"
-              : "#91b2d5",
+          color: selectedIds.has(`member:${m.id}`) ? "#d2b8ff" : "#91b2d5",
         }),
       );
       line.userData.selection = { kind: "member", id: m.id };
       s.model.add(line);
+      const stations = result?.members[m.id];
+      if (stations) {
+        const positions = stations.map((v) => {
+          const p = interpolate(a, b, v.t);
+          return scenePoint({
+            x: p.x + v.ux * deformationScale,
+            y: p.y + v.uy * deformationScale,
+            z: p.z + v.uz * deformationScale,
+          });
+        });
+        s.model.add(
+          new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(positions),
+            new THREE.LineBasicMaterial({ color: "#67d6c0" }),
+          ),
+        );
+      }
     }
     for (const n of project.nodes) {
-      const selected = selection?.kind === "node" && selection.id === n.id;
+      const selected = selectedIds.has(`node:${n.id}`);
       const sphere = new THREE.Mesh(
         new THREE.SphereGeometry(selected ? 0.095 : 0.06, 12, 8),
         new THREE.MeshStandardMaterial({
@@ -191,7 +233,7 @@ export default function SpatialView({
       }
     }
     s.render();
-  }, [project, selection]);
+  }, [project, selection, result, deformationScale]);
   useEffect(() => {
     state.current?.fit();
   }, [project.id]);
@@ -200,7 +242,7 @@ export default function SpatialView({
       <div className="view-heading">
         <span>
           <i className="view-dot mint" />
-          Perspectiva 3D <small>MODELO</small>
+          Perspectiva 3D <small>{result ? "DEFORMADA" : "MODELO"}</small>
         </span>
         <button
           title="Enquadrar vista 3D"
@@ -213,7 +255,7 @@ export default function SpatialView({
       <div ref={container} className="three-container" />
       {error && (
         <div className="webgl-error">
-          WebGL indisponível. A vista XZ continua disponível para modelagem.
+          WebGL indisponível. Use o plano de trabalho para modelar.
         </div>
       )}
       <div className="spatial-compass">
@@ -223,7 +265,13 @@ export default function SpatialView({
       </div>
       <div className="view-foot">
         <span>Arraste para orbitar · Scroll para zoom</span>
-        <span>Y = 0</span>
+        <span>
+          {result
+            ? `×${deformationScale.toFixed(1)}`
+            : project.mode === "planar"
+              ? "Y = 0"
+              : "XYZ · m"}
+        </span>
       </div>
     </section>
   );

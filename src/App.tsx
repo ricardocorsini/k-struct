@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   Box,
+  Boxes,
   ChevronDown,
   CircleDot,
   FilePlus2,
@@ -26,18 +27,38 @@ import {
 } from "lucide-react";
 import {
   addPoint,
-  nextName,
   beamExample,
   createProject,
+  projectSchema,
+  referenceErrors,
   parseProject,
   removeSelection,
   serializeProject,
   uid,
   type Project,
+  type SelectedObject,
   type Selection,
 } from "./domain/model";
+import { addMember, connectIntersections, replicate } from "./domain/editing";
+import {
+  onPlane,
+  origin,
+  planeCoordinates,
+  type PlaneKind,
+  type Point3,
+  type WorkPlane,
+} from "./domain/geometry";
 import { historyReducer } from "./domain/history";
-import Elevation, { type Display, type Tool } from "./components/Elevation";
+import WorkPlaneView, {
+  additiveSelection,
+  type Display,
+  type Tool,
+} from "./components/WorkPlaneView";
+import {
+  GuideEditor,
+  ReplicateDialog,
+  WorkPlaneControls,
+} from "./components/LaunchTools";
 import SpatialView from "./components/SpatialView";
 import Inspector from "./components/Inspector";
 import Results from "./components/Results";
@@ -61,7 +82,9 @@ import {
 
 const initial = () => {
   try {
-    const cached = localStorage.getItem("kstruct.draft.v1");
+    const cached =
+      localStorage.getItem("kstruct.draft.v2") ??
+      localStorage.getItem("kstruct.draft.v1");
     if (cached) return parseProject(cached);
   } catch {
     /* Corrupted drafts never prevent opening the editor. */
@@ -75,9 +98,21 @@ export default function App() {
     future: [],
   }));
   const p = history.current;
-  const [selection, setSelection] = useState<Selection>(null),
+  const spatial = p.mode === "spatial";
+  const [selection, setSelection] = useState<SelectedObject[]>([]),
     [tool, setTool] = useState<Tool>("select");
-  const [pending, setPending] = useState<{ x: number; z: number } | null>(null),
+  const [preferredPlane, setPlane] = useState<PlaneKind>("XY");
+  const [guideId, setGuide] = useState("");
+  const [orthogonal, setOrthogonal] = useState(true);
+  const [launchDialog, setLaunchDialog] = useState<
+    "guides" | "replicate" | null
+  >(null);
+  const kind = spatial ? preferredPlane : "XZ";
+  const planeGuides = p.guides[planeCoordinates[kind][2]];
+  const activeGuide =
+    planeGuides.find((g) => g.id === guideId) ?? planeGuides[0];
+  const plane: WorkPlane = { kind, offset: spatial ? activeGuide.position : 0 };
+  const [pending, setPending] = useState<Point3 | null>(null),
     [display, setDisplay] = useState<Display>("model");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [activeRun, setActiveRun] = useState<{
@@ -90,7 +125,7 @@ export default function App() {
   const [lastLog, setLastLog] = useState<RunLog | null>(null);
   const [showRunHistory, setShowRunHistory] = useState(false);
   const [message, setMessage] = useState(
-    "Pronto para modelar. Selecione Barra (B) e marque os pontos na vista XZ, ou abra a viga de referência.",
+    "Pronto para modelar. Selecione Barra (B) e marque duas extremidades no plano de trabalho.",
   );
   const [saved, setSaved] = useState(serializeProject(p));
   const [tab, setTab] = useState("Modelo"),
@@ -120,7 +155,7 @@ export default function App() {
     setResult(null);
     setDisplay("model");
     try {
-      localStorage.setItem("kstruct.draft.v1", serialized);
+      localStorage.setItem("kstruct.draft.v2", serialized);
     } catch {
       setMessage(
         "Não foi possível guardar o rascunho automático. Salve o projeto em arquivo.",
@@ -137,14 +172,41 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", fn);
   }, [dirty]);
   const edit = useCallback((fn: (p: Project) => void) => {
-    const next = structuredClone(current.current);
-    fn(next);
-    if (serializeProject(next) !== serializeProject(current.current)) {
-      setResult(null);
-      setDisplay("model");
+    try {
+      const next = structuredClone(current.current);
+      fn(next);
+      if (!projectSchema.safeParse(next).success)
+        throw new Error(
+          "A alteração contém valores inválidos ou excede os limites do projeto.",
+        );
+      const errors = referenceErrors(next);
+      if (errors.length) throw new Error(errors.join("\n"));
+      if (serializeProject(next) !== serializeProject(current.current)) {
+        current.current = next;
+        dispatch({ type: "change", project: next });
+        setResult(null);
+        setDisplay("model");
+      }
+      return null;
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      setMessage(error);
+      return error;
     }
-    dispatch({ type: "change", project: next });
   }, []);
+  const isSelected = (kind: SelectedObject["kind"], id: string) =>
+    selection.some((s) => s.kind === kind && s.id === id);
+  const selectObject = (object: Selection, additive = false) => {
+    if (!additive) setSelection(object ? [object] : []);
+    else if (object)
+      setSelection((selected) => {
+        const same = (s: SelectedObject) =>
+          s.kind === object.kind && s.id === object.id;
+        return selected.some(same)
+          ? selected.filter((s) => !same(s))
+          : [...selected, object];
+      });
+  };
   const changeTool = (t: Tool) => {
     setTool(t);
     setPending(null);
@@ -152,9 +214,12 @@ export default function App() {
   };
   const replace = (project: Project) => {
     setResult(null);
+    current.current = project;
     dispatch({ type: "reset", project });
-    setSelection(null);
+    setSelection([]);
     setPending(null);
+    setPlane("XY");
+    setGuide("");
     setCaseId(project.analysisCases[0].id);
     setPatternId(project.loadPatterns[0].id);
     setSaved(serializeProject(project));
@@ -188,26 +253,30 @@ export default function App() {
     }
   };
   const remove = () => {
-    edit((p) => removeSelection(p, selection));
-    setSelection(null);
+    if (edit((p) => removeSelection(p, selection))) return;
+    setSelection([]);
     setPending(null);
   };
   const undo = () => {
     setResult(null);
     setDisplay("model");
     dispatch({ type: "undo" });
-    setSelection(null);
+    setSelection([]);
     setPending(null);
   };
   const redo = () => {
     setResult(null);
     setDisplay("model");
     dispatch({ type: "redo" });
-    setSelection(null);
+    setSelection([]);
     setPending(null);
   };
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (launchDialog) {
+        if (e.key === "Escape") setLaunchDialog(null);
+        return;
+      }
       if (settings || confirmation || showRunHistory) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
@@ -225,7 +294,7 @@ export default function App() {
       }
       if (e.key === "Escape") {
         changeTool("select");
-        setSelection(null);
+        setSelection([]);
       }
       if (!e.ctrlKey && !e.metaKey) {
         if (e.key.toLowerCase() === "b") changeTool("member");
@@ -237,47 +306,68 @@ export default function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
-  const onPoint = (x: number, z: number) => {
+  const onPoint = (point: Point3) => {
     if (tool === "node") {
-      edit((p) => {
-        const n = addPoint(p, x, z);
-        setSelection({ kind: "node", id: n.id });
+      let id = "";
+      const error = edit((p) => {
+        id = addPoint(p, point).id;
       });
+      if (!error) selectObject({ kind: "node", id });
       return;
     }
     if (tool !== "member") return;
     if (!pending) {
-      setPending({ x, z });
+      setPending(point);
       return;
     }
-    if (Math.hypot(x - pending.x, z - pending.z) < 1e-6) {
-      setMessage("Escolha uma extremidade diferente para a barra.");
-      return;
-    }
-    edit((p) => {
-      const a = addPoint(p, pending.x, pending.z),
-        b = addPoint(p, x, z);
-      if (
-        p.members.some(
-          (m) =>
-            (m.start === a.id && m.end === b.id) ||
-            (m.start === b.id && m.end === a.id),
-        )
-      ) {
-        setMessage("Já existe uma barra entre esses nós.");
-        return;
-      }
-      const id = uid();
-      p.members.push({
-        id,
-        name: nextName("B", p.members),
-        start: a.id,
-        end: b.id,
-        sectionId: p.sections[0].id,
-      });
-      setSelection({ kind: "member", id });
+    let id = "";
+    const error = edit((p) => {
+      id = addMember(p, pending, point).id;
     });
-    setPending(null);
+    if (!error) {
+      selectObject({ kind: "member", id });
+      setPending(null);
+    }
+  };
+  const selectPlane = () => {
+    const ids = new Set(
+      p.nodes.filter((n) => onPlane(n, plane)).map((n) => n.id),
+    );
+    changeTool("select");
+    setSelection([
+      ...Array.from(ids, (id) => ({ kind: "node" as const, id })),
+      ...p.members
+        .filter((m) => ids.has(m.start) && ids.has(m.end))
+        .map((m) => ({ kind: "member" as const, id: m.id })),
+    ]);
+  };
+  const connect = () => {
+    let report: ReturnType<typeof connectIntersections> | undefined;
+    const error = edit((p) => {
+      report = connectIntersections(p);
+    });
+    if (error || !report) return;
+    changeTool("select");
+    if (report.divided) setSelection([]);
+    setMessage(
+      report.divided
+        ? `${report.divided} barras subdivididas · ${report.joints} novos nós.`
+        : "Nenhuma interseção ou nó interno pendente de conexão.",
+    );
+  };
+  const replicateSelection = (offset: Point3, copies: number) => {
+    let created: SelectedObject[] = [];
+    const error = edit((p) => {
+      created = replicate(p, selection, offset, copies);
+    });
+    if (!error) {
+      changeTool("select");
+      setSelection(created);
+      setMessage(
+        `${copies} cópia(s) criada(s) · ${created.length} objetos selecionados.`,
+      );
+    }
+    return error;
   };
   const run = async () => {
     if (activeRunId.current) return;
@@ -318,7 +408,7 @@ export default function App() {
         return;
       }
       setResult(parseOofemOutput(execution.output, input));
-      setDisplay("m");
+      setDisplay(spatial ? "deformed" : "m");
       setMessage(
         `Análise concluída · ${requestedCase}\nEquilíbrio global verificado. Consulte reações, deslocamentos e esforços.${historyNotice}`,
       );
@@ -368,6 +458,17 @@ export default function App() {
             }
           >
             <FilePlus2 size={17} />
+          </button>
+          <button
+            title="Novo pórtico espacial"
+            aria-label="Novo pórtico espacial"
+            onClick={() =>
+              protect("Criar um pórtico espacial", () =>
+                replace(createProject("spatial")),
+              )
+            }
+          >
+            <Boxes size={17} />
           </button>
           <button
             title="Abrir projeto"
@@ -465,7 +566,7 @@ export default function App() {
                 ))}
                 <button
                   className="tool-button"
-                  disabled={!selection}
+                  disabled={!selection.length}
                   onClick={remove}
                 >
                   <Trash2 size={19} />
@@ -538,7 +639,11 @@ export default function App() {
               </div>
             )}
             <div className="analysis-description">
-              <b>Estática linear no plano XZ</b>
+              <b>
+                {spatial
+                  ? "Estática linear espacial"
+                  : "Estática linear no plano XZ"}
+              </b>
               <span>
                 Euler–Bernoulli · {p.mesh.segmentsPerMember} elementos por barra
               </span>
@@ -637,13 +742,15 @@ export default function App() {
                 </summary>
                 {p.nodes.map((n) => (
                   <button
-                    className={
-                      selection?.kind === "node" && selection.id === n.id
-                        ? "selected"
-                        : ""
-                    }
+                    className={isSelected("node", n.id) ? "selected" : ""}
+                    aria-pressed={isSelected("node", n.id)}
                     key={n.id}
-                    onClick={() => setSelection({ kind: "node", id: n.id })}
+                    onClick={(e) =>
+                      selectObject(
+                        { kind: "node", id: n.id },
+                        additiveSelection(e),
+                      )
+                    }
                   >
                     <CircleDot size={12} />
                     {n.name}
@@ -662,13 +769,15 @@ export default function App() {
                 </summary>
                 {p.members.map((m) => (
                   <button
-                    className={
-                      selection?.kind === "member" && selection.id === m.id
-                        ? "selected"
-                        : ""
-                    }
+                    className={isSelected("member", m.id) ? "selected" : ""}
+                    aria-pressed={isSelected("member", m.id)}
                     key={m.id}
-                    onClick={() => setSelection({ kind: "member", id: m.id })}
+                    onClick={(e) =>
+                      selectObject(
+                        { kind: "member", id: m.id },
+                        additiveSelection(e),
+                      )
+                    }
                   >
                     <MoveUpRight size={13} />
                     {m.name}
@@ -722,7 +831,7 @@ export default function App() {
           <div className="model-bar">
             <div>
               <span className="status-dot" />
-              Modelo estrutural{" "}
+              {spatial ? "Modelo espacial" : "Modelo estrutural"}{" "}
               <span className="model-count">
                 {p.nodes.length} nós · {p.members.length} barras
               </span>
@@ -736,16 +845,49 @@ export default function App() {
               {result && (
                 <>
                   <option value="deformed">Deformada ampliada</option>
-                  <option value="m">Momento fletor M</option>
-                  <option value="v">Cortante V</option>
+                  {spatial ? (
+                    <>
+                      <option value="my">Momento fletor My</option>
+                      <option value="mz">Momento fletor Mz</option>
+                      <option value="mx">Torção Mx</option>
+                      <option value="vy">Cortante Vy</option>
+                      <option value="vz">Cortante Vz</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="m">Momento fletor M</option>
+                      <option value="v">Cortante V</option>
+                    </>
+                  )}
                   <option value="n">Normal N</option>
                 </>
               )}
             </select>
           </div>
+          {spatial && (
+            <WorkPlaneControls
+              kind={plane.kind}
+              guideId={activeGuide.id}
+              guides={planeGuides}
+              orthogonal={orthogonal}
+              selected={selection.length}
+              onPlane={(kind) => {
+                setPlane(kind);
+                setGuide("");
+              }}
+              onGuide={setGuide}
+              toggleOrtho={() => setOrthogonal((v) => !v)}
+              editGuides={() => setLaunchDialog("guides")}
+              selectPlane={selectPlane}
+              replicate={() => setLaunchDialog("replicate")}
+              connect={connect}
+            />
+          )}
           <div className={`viewports ${dual ? "dual" : "single"}`}>
-            <Elevation
+            <WorkPlaneView
               project={p}
+              plane={plane}
+              orthogonal={orthogonal}
               selection={selection}
               tool={tool}
               result={result}
@@ -753,13 +895,14 @@ export default function App() {
               patternId={patternId}
               pending={pending}
               onPoint={onPoint}
-              onSelect={setSelection}
+              onSelect={selectObject}
             />
             {dual && (
               <SpatialView
                 project={p}
                 selection={selection}
-                onSelect={setSelection}
+                result={display === "deformed" ? result : null}
+                onSelect={selectObject}
               />
             )}
           </div>
@@ -767,7 +910,9 @@ export default function App() {
             <div className="diagram-caption">
               {display === "deformed"
                 ? "Deformada ampliada automaticamente. Valores reais na tabela de deslocamentos."
-                : "Esforços amostrados nos nós da malha. N positivo em tração. M positivo sagente para barras horizontais orientadas +X."}
+                : spatial
+                  ? "Esforços nos eixos locais, na face positiva de x. N positivo em tração. O diagrama é desenhado no plano ativo."
+                  : "Esforços amostrados nos nós da malha. N positivo em tração. M positivo sagente para barras horizontais orientadas +X."}
             </div>
           )}
           <Results
@@ -804,7 +949,9 @@ export default function App() {
               ? "Marque a primeira extremidade da barra"
               : tool === "node"
                 ? "Clique na malha para inserir um nó"
-                : "Selecione um objeto para editar"}
+                : selection.length > 1
+                  ? `${selection.length} objetos selecionados`
+                  : "Selecione um objeto · Ctrl ou Shift para seleção múltipla"}
         </span>
         <span>
           kN · m · rad <i /> {desktop() ? "Desktop" : "Navegador · edição"}{" "}
@@ -848,6 +995,34 @@ export default function App() {
       )}
       {showRunHistory && (
         <RunHistory latest={lastLog} onClose={() => setShowRunHistory(false)} />
+      )}
+      {launchDialog === "guides" && (
+        <GuideEditor
+          guides={p.guides}
+          onClose={() => setLaunchDialog(null)}
+          onApply={(guides) =>
+            edit((p) => {
+              p.guides = guides;
+            })
+          }
+        />
+      )}
+      {launchDialog === "replicate" && (
+        <ReplicateDialog
+          count={selection.length}
+          initial={{
+            ...origin,
+            z:
+              plane.kind === "XY"
+                ? ([...p.guides.z]
+                    .sort((a, b) => a.position - b.position)
+                    .find((g) => g.position > plane.offset)?.position ??
+                    plane.offset) - plane.offset
+                : 0,
+          }}
+          onApply={replicateSelection}
+          onClose={() => setLaunchDialog(null)}
+        />
       )}
       {confirmation && (
         <div className="modal-backdrop">

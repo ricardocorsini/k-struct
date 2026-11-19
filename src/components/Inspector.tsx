@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, CircleDot, MoveRight, SlidersHorizontal } from "lucide-react";
-import type { Project, Selection } from "../domain/model";
+import { coordinates, distance } from "../domain/geometry";
+import {
+  free,
+  nodalLoad,
+  uniformLoad,
+  type NodalLoad,
+  type UniformLoad,
+  type Project,
+  type SelectedObject,
+} from "../domain/model";
 
 export function NumberField({
   label,
@@ -74,6 +83,26 @@ export function NumberField({
   );
 }
 
+const nodalComponents = ["fx", "fy", "fz", "mx", "my", "mz"] as const;
+const uniformComponents = ["qx", "qy", "qz"] as const;
+type Pattern = Project["loadPatterns"][number];
+
+function sumNodal(pattern: Pattern, id: string) {
+  const values = nodalLoad(id);
+  for (const load of pattern.nodal)
+    if (load.nodeId === id)
+      for (const key of nodalComponents) values[key] += load[key];
+  return values;
+}
+
+function sumUniform(pattern: Pattern, id: string) {
+  const values = uniformLoad(id);
+  for (const load of pattern.uniform)
+    if (load.memberId === id)
+      for (const key of uniformComponents) values[key] += load[key];
+  return values;
+}
+
 export default function Inspector({
   project: p,
   selection,
@@ -81,52 +110,78 @@ export default function Inspector({
   edit,
 }: {
   project: Project;
-  selection: Selection;
+  selection: SelectedObject[];
   patternId: string;
   edit: (fn: (p: Project) => void) => void;
 }) {
+  const single = selection.length === 1 ? selection[0] : null;
+  const spatial = p.mode === "spatial";
+  const dofs = spatial
+    ? (["ux", "uy", "uz", "rx", "ry", "rz"] as const)
+    : (["ux", "uz", "ry"] as const);
+  const axes = spatial ? coordinates : (["x", "z"] as const);
   const node =
-    selection?.kind === "node"
-      ? p.nodes.find((n) => n.id === selection.id)
+    single?.kind === "node"
+      ? p.nodes.find((n) => n.id === single.id)
       : undefined;
   const member =
-    selection?.kind === "member"
-      ? p.members.find((m) => m.id === selection.id)
+    single?.kind === "member"
+      ? p.members.find((m) => m.id === single.id)
       : undefined;
   const section = p.sections.find(
     (s) => s.id === (member?.sectionId ?? p.sections[0].id),
   )!;
   const material = p.materials.find((m) => m.id === section.materialId)!;
   const pattern = p.loadPatterns.find((l) => l.id === patternId)!;
-  const nl = pattern.nodal
-    .filter((l) => l.nodeId === node?.id)
-    .reduce((s, l) => ({ fx: s.fx + l.fx, fz: s.fz + l.fz, my: s.my + l.my }), {
-      fx: 0,
-      fz: 0,
-      my: 0,
-    });
-  const ul = pattern.uniform
-    .filter((l) => l.memberId === member?.id)
-    .reduce((s, l) => ({ qx: s.qx + l.qx, qz: s.qz + l.qz }), { qx: 0, qz: 0 });
-  const nodeLoad = (key: keyof typeof nl, value: number) =>
+  const nl = sumNodal(pattern, node?.id ?? "");
+  const ul = sumUniform(pattern, member?.id ?? "");
+  const nodeLoad = (key: Exclude<keyof NodalLoad, "nodeId">, value: number) =>
     edit((p) => {
       const pat = p.loadPatterns.find((l) => l.id === patternId)!;
+      const next = sumNodal(pat, node!.id);
+      if (next[key] / 1000 === value) return;
+      next[key] = value * 1000;
       pat.nodal = pat.nodal.filter((l) => l.nodeId !== node!.id);
-      pat.nodal.push({ nodeId: node!.id, ...nl, [key]: value * 1000 });
+      if (nodalComponents.some((k) => next[k])) pat.nodal.push(next);
     });
-  const uniformLoad = (key: keyof typeof ul, value: number) =>
+  const setUniformLoad = (
+    key: Exclude<keyof UniformLoad, "memberId">,
+    value: number,
+  ) =>
     edit((p) => {
       const pat = p.loadPatterns.find((l) => l.id === patternId)!;
+      const next = sumUniform(pat, member!.id);
+      if (next[key] / 1000 === value) return;
+      next[key] = value * 1000;
       pat.uniform = pat.uniform.filter((l) => l.memberId !== member!.id);
-      pat.uniform.push({ memberId: member!.id, ...ul, [key]: value * 1000 });
+      if (uniformComponents.some((k) => next[k])) pat.uniform.push(next);
     });
+  const selectedNodes = new Set(
+    selection.filter((s) => s.kind === "node").map((s) => s.id),
+  );
+  const applyRestraints = (fixed: boolean) =>
+    edit((p) => {
+      for (const n of p.nodes) {
+        if (!selectedNodes.has(n.id)) continue;
+        n.restraints = free();
+        for (const k of dofs) n.restraints[k] = fixed;
+      }
+    });
+  const supportPresets = (
+    <div className="support-presets">
+      <button onClick={() => applyRestraints(true)}>
+        {node ? "Engastar nó" : "Engastar nós"}
+      </button>
+      <button onClick={() => applyRestraints(false)}>Liberar apoios</button>
+    </div>
+  );
   return (
     <aside className="inspector">
       <div className="panel-title">
         <SlidersHorizontal size={15} />
         Propriedades
       </div>
-      <div className="inspector-scroll" key={selection?.id ?? "default"}>
+      <div className="inspector-scroll" key={single?.id ?? "default"}>
         <div className="object-heading">
           <div className="object-icon">
             {node ? <CircleDot /> : member ? <MoveRight /> : <Box />}
@@ -135,10 +190,25 @@ export default function Inspector({
             <small>
               {node ? "NÓ ESTRUTURAL" : member ? "BARRA ESTRUTURAL" : "MODELO"}
             </small>
-            <h3>{node?.name ?? member?.name ?? "Definições iniciais"}</h3>
+            <h3>
+              {node?.name ??
+                member?.name ??
+                (selection.length > 1
+                  ? "Seleção múltipla"
+                  : "Definições iniciais")}
+            </h3>
           </div>
         </div>
-        {!node && !member && (
+        {selection.length > 1 && (
+          <>
+            <p className="help">
+              {selectedNodes.size} nós · {selection.length - selectedNodes.size}{" "}
+              barras
+            </p>
+            {selectedNodes.size > 0 && supportPresets}
+          </>
+        )}
+        {!selection.length && (
           <p className="help">
             Selecione um nó ou uma barra em qualquer vista para editar suas
             propriedades.
@@ -147,34 +217,29 @@ export default function Inspector({
         {node && (
           <>
             <h4>Coordenadas globais</h4>
-            <NumberField
-              label="X"
-              value={node.x}
-              unit="m"
-              onChange={(v) =>
-                edit((p) => {
-                  p.nodes.find((n) => n.id === node.id)!.x = v;
-                })
-              }
-            />
-            <NumberField
-              label="Z"
-              value={node.z}
-              unit="m"
-              onChange={(v) =>
-                edit((p) => {
-                  p.nodes.find((n) => n.id === node.id)!.z = v;
-                })
-              }
-            />
-            <div className="property-line">
-              <span>Y · Plano de trabalho</span>
-              <b>0,00 m</b>
-            </div>
+            {axes.map((k) => (
+              <NumberField
+                key={k}
+                label={k.toUpperCase()}
+                value={node[k]}
+                unit="m"
+                onChange={(v) =>
+                  edit((p) => {
+                    p.nodes.find((n) => n.id === node.id)![k] = v;
+                  })
+                }
+              />
+            ))}
+            {!spatial && (
+              <div className="property-line">
+                <span>Y</span>
+                <b>0,00 m</b>
+              </div>
+            )}
             <h4>Apoios e restrições</h4>
             <p className="help">Marque os graus de liberdade impedidos.</p>
             <div className="restraints">
-              {(["ux", "uz", "ry"] as const).map((k) => (
+              {dofs.map((k) => (
                 <label key={k}>
                   <input
                     type="checkbox"
@@ -188,37 +253,28 @@ export default function Inspector({
                     }
                   />
                   <span>
-                    {k === "ry"
-                      ? "Rotação Y"
-                      : `Translação ${k[1].toUpperCase()}`}
+                    {`${k[0] === "r" ? "Rotação" : "Translação"} ${k[1].toUpperCase()}`}
                   </span>
                 </label>
               ))}
             </div>
+            {supportPresets}
             <h4>
               Carga nodal <span>{pattern.name}</span>
             </h4>
-            <NumberField
-              label="Força X"
-              unit="kN"
-              value={nl.fx / 1000}
-              onChange={(v) => nodeLoad("fx", v)}
-            />
-            <NumberField
-              label="Força Z"
-              unit="kN"
-              value={nl.fz / 1000}
-              onChange={(v) => nodeLoad("fz", v)}
-            />
-            <NumberField
-              label="Momento Y"
-              unit="kN·m"
-              value={nl.my / 1000}
-              onChange={(v) => nodeLoad("my", v)}
-            />
+            {(spatial ? nodalComponents : (["fx", "fz", "my"] as const)).map(
+              (k) => (
+                <NumberField
+                  key={`${patternId}-${k}`}
+                  label={`${k[0] === "f" ? "Força" : "Momento"} ${k[1].toUpperCase()}`}
+                  value={nl[k] / 1000}
+                  unit={k[0] === "f" ? "kN" : "kN·m"}
+                  onChange={(v) => nodeLoad(k, v)}
+                />
+              ),
+            )}
             <p className="help">
-              Z positivo para cima. Momento positivo pela regra da mão direita
-              em Y.
+              Z positivo para cima. Momentos globais pela regra da mão direita.
             </p>
           </>
         )}
@@ -238,7 +294,7 @@ export default function Inspector({
                 {(() => {
                   const a = p.nodes.find((n) => n.id === member.start)!,
                     b = p.nodes.find((n) => n.id === member.end)!;
-                  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z).toFixed(3);
+                  return distance(a, b).toFixed(3);
                 })()}{" "}
                 m
               </b>
@@ -262,28 +318,39 @@ export default function Inspector({
                 ))}
               </select>
             </label>
+            {spatial && (
+              <NumberField
+                label="Rotação em torno de x local"
+                value={member.roll}
+                unit="°"
+                min={-360}
+                max={360}
+                onChange={(v) =>
+                  edit((p) => {
+                    p.members.find((m) => m.id === member.id)!.roll = v;
+                  })
+                }
+              />
+            )}
             <h4>
               Carga distribuída <span>{pattern.name}</span>
             </h4>
-            <NumberField
-              label="qX global"
-              unit="kN/m"
-              value={ul.qx / 1000}
-              onChange={(v) => uniformLoad("qx", v)}
-            />
-            <NumberField
-              label="qZ global"
-              unit="kN/m"
-              value={ul.qz / 1000}
-              onChange={(v) => uniformLoad("qz", v)}
-            />
+            {axes.map((k) => (
+              <NumberField
+                key={`${patternId}-${k}`}
+                label={`q${k.toUpperCase()} global`}
+                unit="kN/m"
+                value={ul[`q${k}`] / 1000}
+                onChange={(v) => setUniformLoad(`q${k}`, v)}
+              />
+            ))}
             <p className="help">
               Carga uniforme por metro de barra. Use qZ negativo para cargas
               verticais descendentes.
             </p>
           </>
         )}
-        {!node && (
+        {!node && selection.length < 2 && (
           <>
             <h4>Seção retangular compartilhada</h4>
             <p className="help">
@@ -357,8 +424,7 @@ export default function Inspector({
           </>
         )}
         <div className="scope-note">
-          <span>ETAPA 01</span>
-          <b>Estática linear · Plano XZ</b>
+          <b>Estática linear · {spatial ? "Espacial" : "Plano XZ"}</b>
           <p>
             Barras de Euler–Bernoulli, ligações rígidas e cargas globais. Peso
             próprio deve ser aplicado como carga.

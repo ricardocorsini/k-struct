@@ -488,6 +488,38 @@ button.primary {
   background: transparent;
   max-width: 195px;
 }
+.plane-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background: #171f2e;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+}
+.plane-tools label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #a7b3c6;
+}
+.plane-tools button,
+.support-presets button,
+.guide-tabs button {
+  border-color: var(--line);
+  background: #1b2535;
+}
+.plane-tools button[aria-pressed="true"],
+.guide-tabs button[aria-pressed="true"] {
+  background: #322643;
+  border-color: #644d80;
+  color: #e0c7ff;
+}
+.plane-tools select {
+  max-width: 155px;
+  padding-block: 5px;
+}
 .viewports {
   display: grid;
   flex: 1;
@@ -578,6 +610,18 @@ button.primary {
   font-size: 9px;
   fill: #50617b;
   pointer-events: none;
+}
+.work-guides {
+  pointer-events: none;
+}
+.work-guides line {
+  stroke: #635280;
+  stroke-width: 1;
+  stroke-dasharray: 5 5;
+}
+.work-guides text {
+  fill: #bda5dc;
+  font-size: 10px;
 }
 .member-label {
   font-size: 10px;
@@ -683,7 +727,7 @@ button.primary {
   position: absolute;
   top: 0;
   left: 16px;
-  color: #77c4a1;
+  color: #7da4e0;
 }
 .axis-x {
   position: absolute;
@@ -695,7 +739,7 @@ button.primary {
   position: absolute;
   bottom: 0;
   left: 0;
-  color: #7da4e0;
+  color: #77c4a1;
 }
 .spatial-compass:after {
   content: "";
@@ -963,6 +1007,13 @@ button.primary {
 .restraints input {
   accent-color: #ac88d9;
 }
+.support-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 11px;
+  font-size: 10px;
+}
 .stack-field {
   display: flex;
   flex-direction: column;
@@ -1104,6 +1155,42 @@ button.primary {
   font-size: 11px;
   border: 1px solid #3c475c;
   padding: 8px 12px;
+}
+.launch-modal {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+.guide-tabs {
+  display: flex;
+  gap: 6px;
+  margin-block: 12px;
+}
+.guide-table {
+  max-height: 300px;
+  overflow: auto;
+  padding: 4px;
+}
+.guide-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: 8px;
+  margin-bottom: 9px;
+}
+.replica-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.guide-row label,
+.replica-fields label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+.modal .launch-error {
+  color: #efad9b;
 }
 ::-webkit-scrollbar {
   width: 6px;

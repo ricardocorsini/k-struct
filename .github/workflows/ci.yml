@@ -81,6 +81,10 @@ jobs:
       - run: npm run oofem:stage
       - name: Analytic benchmarks with real OOFEM
         run: OOFEM_BIN="$GITHUB_WORKSPACE/.oofem-dist/build/bin/oofem" npm test
+      - name: Spatial launch and results with real OOFEM
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+        run: OOFEM_BIN="$GITHUB_WORKSPACE/.oofem-dist/build/bin/oofem" npm run test:e2e -- spatial.spec.ts
       - uses: dtolnay/rust-toolchain@stable
       - name: Native process integration with real OOFEM
         env:

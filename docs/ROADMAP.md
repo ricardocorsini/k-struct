@@ -22,7 +22,9 @@ Empacotamento do OOFEM 3.0 para Windows e Linux, manifesto com hashes, fontes e 
 
 ## Próximo incremento
 
-Introduzir eixos e pavimentos no modelo, planos de trabalho e lançamento espacial. Usar o pórtico assimétrico de dois pavimentos como referência de aceitação para o fluxo com Beam3d e seis graus de liberdade.
+O lançamento espacial da etapa 03 inclui eixos, pavimentos, planos de trabalho, ortogonalidade, seleção múltipla, replicação, interseções e análise Beam3d. O [benchmark espacial](VALIDATION.md#pórtico-espacial-de-dois-pavimentos) cobre a criação a partir de um projeto vazio.
+
+A etapa 04 introduz edição de padrões e casos, combinações e envelopes registrados com seus casos governantes. As fontes de massa e a análise modal seguem na etapa 06.
 
 ## Decisões que devem continuar explícitas
 

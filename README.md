@@ -6,16 +6,17 @@ KStruct faz referência à matriz de rigidez **[K]**. A direção do produto é 
 
 ![Interface inicial do KStruct](docs/images/editor.webp)
 
-## Etapa atual — 0.2.0 alpha
+## Etapa 03 · Pórticos espaciais
 
-Primeiro fluxo de trabalho de estática linear **no plano XZ**. A perspectiva 3D mostra o mesmo modelo e compartilha a seleção. A análise espacial será implementada em uma etapa própria.
+O editor trabalha com projetos **planos XZ** ou **espaciais XYZ** e usa a mesma seleção na vista de lançamento, na perspectiva 3D e no explorador. Os instaladores da etapa 02 correspondem à versão 0.2.0 alpha. O lançamento espacial está no código da etapa 03.
 
-- Lançar barras e nós por clique com snap de 0,50 m e reutilização de nós coincidentes.
-- Editar coordenadas, apoios UX/UZ/RY, seção retangular, módulo E, Poisson e cargas globais.
+- Lançar barras e nós em planta XY ou elevações XZ/YZ, com eixos, pavimentos, modo ortogonal e snap em referências ou passos de 0,50 m.
+- Selecionar, replicar por deslocamento e conectar interseções em 3D. As cópias levam geometria, seção e orientação, com nós novos sem apoios nem cargas.
+- Editar coordenadas, apoios nos graus de liberdade do projeto, seção retangular, orientação da seção e cargas globais.
 - Aplicar forças e momentos nodais e cargas uniformes em barras. Peso próprio é manual nesta etapa.
-- Salvar e reabrir `.kstruct.json`, com formato versionado e validação. Desfazer/refazer até 50 edições e recuperar o último rascunho local.
+- Salvar e reabrir `.kstruct.json` no esquema v2, com migração dos projetos v1 na abertura. Desfazer e refazer até 50 edições e recuperar o último rascunho local.
 - Executar o OOFEM 3.0 integrado nos pacotes Windows e Linux, com diagnóstico, cancelamento e histórico local.
-- Consultar reações, deslocamentos, esforços N/V/M, deformada ampliada, diagramas amostrados, CSV e saída original.
+- Resolver a estática linear com `Beam2d` ou `Beam3d`. Consultar os seis componentes de reações, deslocamentos e esforços no modelo espacial, além de deformada, diagramas, CSV e saída do OOFEM.
 - Invalidar resultados após alterações. Verificar conectividade, apoios de cada componente e equilíbrio global antes de apresentar resultados.
 
 No navegador, use o editor e a exportação de entrada. O botão **Analisar** executa o solver nativo na aplicação desktop.
@@ -51,7 +52,9 @@ A compilação dos pacotes prepara o OOFEM a partir do commit fixado da versão 
 2. Selecione a barra ou um nó em qualquer vista ou no explorador. As propriedades aparecem à direita.
 3. No desktop instalado, clique **Analisar**. Reações esperadas de 30 kN por apoio, momento de meio de vão 45 kN·m e flecha −8,4375 mm.
 4. Altere a carga e analise novamente. A edição remove os resultados anteriores.
-5. Para começar do zero, use **Novo projeto**, ative **Barra** (`B`) e marque duas extremidades. Defina apoios e cargas antes de analisar.
+5. Para começar do zero, use **Novo projeto** para XZ ou **Novo pórtico espacial** para XYZ. Ative **Barra** (`B`) e marque duas extremidades. Defina apoios e cargas antes de analisar.
+
+No modelo espacial, defina os eixos e as cotas em **Eixos e pavimentos**. Escolha o pavimento para lançar vigas em planta e alterne para uma elevação para lançar pilares. **Orto** alinha a segunda extremidade no plano. Segure `Shift` para inverter o modo durante o clique. Use `Ctrl` ou `Shift` para montar uma seleção e **Replicar** para copiar a geometria até outro pavimento. Use **Conectar interseções** onde as barras precisam compartilhar nós.
 
 Atalhos: `V` selecionar, `N` nó, `B` barra, `Esc` cancelar lançamento, `Delete` excluir seleção, `Ctrl+Z` desfazer, `Ctrl+Shift+Z` refazer e `Ctrl+S` salvar. Na elevação, scroll aproxima e afasta, botão central arrasta. A vista 3D orbita ao arrastar.
 
@@ -68,6 +71,7 @@ Os benchmarks numéricos exigem `OOFEM_BIN`. Sem ele, aparecem explicitamente co
 
 ```sh
 OOFEM_BIN=/caminho/absoluto/oofem npm test
+OOFEM_BIN=/caminho/absoluto/oofem npm run test:e2e -- spatial.spec.ts
 cargo test --manifest-path crates/solver-runner/Cargo.toml
 ```
 

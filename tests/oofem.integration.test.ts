@@ -1,31 +1,26 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { beamExample, createProject, type Project } from "../src/domain/model";
+import {
+  addPoint,
+  beamExample,
+  createProject,
+  free,
+  nodalLoad,
+  uniformLoad,
+  type Project,
+} from "../src/domain/model";
 import { exportOofem, parseOofemOutput } from "../src/solver/oofem";
 import portal from "./fixtures/portal-planar.json";
 import portalExpected from "./fixtures/portal-expected.json";
+import { runDeck } from "./fixtures/solve-oofem";
+import {
+  spatialBenchmark,
+  spatialBenchmarkDifferences,
+} from "./fixtures/spatial-benchmark";
 
 const executable = process.env.OOFEM_BIN;
 function solve(p: Project) {
-  const input = exportOofem(p, "EL"),
-    dir = mkdtempSync(join(tmpdir(), "kstruct-test-"));
-  try {
-    writeFileSync(join(dir, "analysis.in"), input.deck);
-    execFileSync(executable!, ["-f", "analysis.in"], {
-      cwd: dir,
-      timeout: 30000,
-      maxBuffer: 32 * 1024 * 1024,
-    });
-    return parseOofemOutput(
-      readFileSync(join(dir, "analysis.out"), "utf8"),
-      input,
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  const input = exportOofem(p, "EL");
+  return parseOofemOutput(runDeck(input.deck, executable!), input);
 }
 
 describe.skipIf(!executable)("OOFEM real · benchmarks analíticos", () => {
@@ -47,7 +42,7 @@ describe.skipIf(!executable)("OOFEM real · benchmarks analíticos", () => {
         x,
         y: 0,
         z,
-        restraints: { ux: fixed, uz: fixed, ry: fixed },
+        restraints: { ...free(), ux: fixed, uz: fixed, ry: fixed },
       };
     });
     p.members = portal.members.map(([start, end, section], i) => ({
@@ -56,14 +51,15 @@ describe.skipIf(!executable)("OOFEM real · benchmarks analíticos", () => {
       start: `N${start}`,
       end: `N${end}`,
       sectionId: `R${section}`,
+      roll: 0,
     }));
     p.loadPatterns[0].uniform = portal.uniform.map(([member, qx, qz]) => ({
-      memberId: `B${member}`,
+      ...uniformLoad(`B${member}`),
       qx,
       qz,
     }));
     p.loadPatterns[0].nodal = portal.nodal.map(([node, fx, fz, my]) => ({
-      nodeId: `N${node}`,
+      ...nodalLoad(`N${node}`),
       fx,
       fz,
       my,
@@ -114,7 +110,7 @@ describe.skipIf(!executable)("OOFEM real · benchmarks analíticos", () => {
     p.nodes[0].restraints.ry = true;
     p.nodes[1].restraints.uz = false;
     p.loadPatterns[0].uniform = [];
-    p.loadPatterns[0].nodal = [{ nodeId: "B", fx: 0, fz: -1000, my: 0 }];
+    p.loadPatterns[0].nodal = [{ ...nodalLoad("B"), fz: -1000 }];
     const r = solve(p);
     expect(r.displacements.B.uz).toBeCloseTo(
       (-1000 * 6 ** 3) / (3 * 2e11 * 1e-4),
@@ -128,7 +124,7 @@ describe.skipIf(!executable)("OOFEM real · benchmarks analíticos", () => {
     p.nodes[1].z = 6;
     p.nodes[0].restraints.ry = true;
     p.nodes[1].restraints.uz = false;
-    p.loadPatterns[0].uniform = [{ memberId: "V1", qx: 1000, qz: 0 }];
+    p.loadPatterns[0].uniform = [{ ...uniformLoad("V1"), qx: 1000 }];
     const r = solve(p);
     expect(r.displacements.B.ux).toBeCloseTo(
       (1000 * 6 ** 4) / (8 * 2e11 * 1e-4),
@@ -144,7 +140,7 @@ describe.skipIf(!executable)("OOFEM real · benchmarks analíticos", () => {
     p.nodes[0].restraints.ry = true;
     p.nodes[1].restraints.uz = false;
     p.loadPatterns[0].uniform = [];
-    p.loadPatterns[0].nodal = [{ nodeId: "B", fx: 1000, fz: 0, my: 0 }];
+    p.loadPatterns[0].nodal = [{ ...nodalLoad("B"), fx: 1000 }];
     const r = solve(p),
       axial = (1000 * 5) / (2e11 * 0.03),
       bending = (1000 * 5 ** 3) / (3 * 2e11 * 1e-4);
@@ -153,5 +149,62 @@ describe.skipIf(!executable)("OOFEM real · benchmarks analíticos", () => {
       8,
     );
     expect(r.displacements.B.uz).toBeCloseTo((axial - bending) * 0.6 * 0.8, 8);
+  });
+  it("balanço espacial com seção girada: flexão biaxial, normal e torção", () => {
+    const p = createProject("spatial");
+    const a = addPoint(p, { x: 0, y: 2, z: 1 });
+    const b = addPoint(p, { x: 3, y: 2, z: 1 });
+    a.restraints = {
+      ux: true,
+      uy: true,
+      uz: true,
+      rx: true,
+      ry: true,
+      rz: true,
+    };
+    p.members = [
+      {
+        id: "B1",
+        name: "B1",
+        start: a.id,
+        end: b.id,
+        sectionId: "rect",
+        roll: 90,
+      },
+    ];
+    p.loadPatterns[0].nodal = [
+      { ...nodalLoad(b.id), fx: 1800, fy: 1200, fz: -2400, mx: 600 },
+    ];
+    const { width, height } = p.sections[0];
+    const { E, nu } = p.materials[0];
+    const iy = (width * height ** 3) / 12;
+    const iz = (height * width ** 3) / 12;
+    const j = 0.00012180866179401363;
+    const g = E / (2 * (1 + nu));
+    const r = solve(p),
+      u = r.displacements[b.id];
+    expect(u.ux).toBeCloseTo((1800 * 3) / (E * width * height), 9);
+    expect(u.uy).toBeCloseTo((1200 * 3 ** 3) / (3 * E * iy), 8);
+    expect(u.uz).toBeCloseTo((-2400 * 3 ** 3) / (3 * E * iz), 8);
+    expect(u.rx).toBeCloseTo((600 * 3) / (g * j), 8);
+    expect(u.ry).toBeCloseTo((2400 * 3 ** 2) / (2 * E * iz), 8);
+    expect(u.rz).toBeCloseTo((1200 * 3 ** 2) / (2 * E * iy), 8);
+    expect(r.reactions[0]).toEqual({
+      nodeId: a.id,
+      fx: -1800,
+      fy: -1200,
+      fz: 2400,
+      mx: -600,
+      my: -7200,
+      mz: -3600,
+    });
+    const { n, vy, vz, mx, my, mz } = r.members.B1[0];
+    expect([n, vy, vz, mx, my, mz]).toEqual([
+      1800, -2400, -1200, 600, 3600, -7200,
+    ]);
+  });
+  it("pórtico espacial assimétrico em dois pavimentos concorda com a rigidez direta independente", () => {
+    const model = spatialBenchmark();
+    expect(spatialBenchmarkDifferences(model, solve(model))).toEqual([]);
   });
 });

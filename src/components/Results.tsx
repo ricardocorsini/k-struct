@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { CheckCircle2, FileDown, History, Terminal } from "lucide-react";
 import type { Project } from "../domain/model";
-import type { AnalysisResult } from "../solver/oofem";
+import type {
+  AnalysisResult,
+  Displacement,
+  Reaction,
+  Station,
+} from "../solver/oofem";
 import { exportFile } from "../solver/desktop";
 
 export default function Results({
@@ -29,48 +34,82 @@ export default function Results({
   };
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", { maximumFractionDigits: 5 });
-  const rows: (string | number)[][] =
-    tab === "reactions"
-      ? (result?.reactions ?? []).map((r) => [
-          project.nodes.find((n) => n.id === r.nodeId)?.name ?? r.nodeId,
-          r.fx / 1000,
-          r.fz / 1000,
-          r.my / 1000,
-        ])
-      : tab === "displacements"
-        ? [
-            ...Object.entries(result?.displacements ?? {}).map(([id, d]) => [
-              project.nodes.find((n) => n.id === id)?.name ?? id,
-              d.ux * 1000,
-              d.uz * 1000,
-              d.ry * 1000,
-            ]),
-            ...Object.entries(result?.members ?? {}).flatMap(([id, stations]) =>
-              stations
-                .slice(1, -1)
-                .map((s) => [
-                  `${project.members.find((m) => m.id === id)?.name ?? id} · x/L ${s.t}`,
-                  s.ux * 1000,
-                  s.uz * 1000,
-                  s.ry * 1000,
-                ]),
-            ),
-          ]
-        : Object.entries(result?.members ?? {}).flatMap(([id, stations]) =>
-            stations.map((s) => [
-              project.members.find((m) => m.id === id)?.name ?? id,
-              s.t,
-              s.n / 1000,
-              s.v / 1000,
-              s.m / 1000,
-            ]),
-          );
-  const headers =
-    tab === "reactions"
-      ? ["Nó", "RX (kN)", "RZ (kN)", "MY (kN·m)"]
-      : tab === "displacements"
-        ? ["Nó / estação", "UX (mm)", "UZ (mm)", "RY (mrad)"]
-        : ["Barra", "x/L", "N (kN)", "V (kN)", "M (kN·m)"];
+  const spatial = project.mode === "spatial";
+  const nodeNames = new Map(project.nodes.map((n) => [n.id, n.name]));
+  const memberNames = new Map(project.members.map((m) => [m.id, m.name]));
+  let rows: (string | number)[][] = [],
+    headers: string[] = [];
+  if (tab === "reactions") {
+    const values = (r: Reaction) =>
+      spatial ? [r.fx, r.fy, r.fz, r.mx, r.my, r.mz] : [r.fx, r.fz, r.my];
+    headers = spatial
+      ? [
+          "Nó",
+          "RX (kN)",
+          "RY (kN)",
+          "RZ (kN)",
+          "MX (kN·m)",
+          "MY (kN·m)",
+          "MZ (kN·m)",
+        ]
+      : ["Nó", "RX (kN)", "RZ (kN)", "MY (kN·m)"];
+    rows = (result?.reactions ?? []).map((r) => [
+      nodeNames.get(r.nodeId) ?? r.nodeId,
+      ...values(r).map((v) => v / 1000),
+    ]);
+  } else if (tab === "displacements") {
+    const values = (d: Displacement) =>
+      (spatial ? [d.ux, d.uy, d.uz, d.rx, d.ry, d.rz] : [d.ux, d.uz, d.ry]).map(
+        (v) => v * 1000,
+      );
+    headers = spatial
+      ? [
+          "Nó / estação",
+          "UX (mm)",
+          "UY (mm)",
+          "UZ (mm)",
+          "RX (mrad)",
+          "RY (mrad)",
+          "RZ (mrad)",
+        ]
+      : ["Nó / estação", "UX (mm)", "UZ (mm)", "RY (mrad)"];
+    rows = [
+      ...Object.entries(result?.displacements ?? {}).map(([id, d]) => [
+        nodeNames.get(id) ?? id,
+        ...values(d),
+      ]),
+      ...Object.entries(result?.members ?? {}).flatMap(([id, stations]) =>
+        stations
+          .slice(1, -1)
+          .map((s) => [
+            `${memberNames.get(id) ?? id} · x/L ${s.t}`,
+            ...values(s),
+          ]),
+      ),
+    ];
+  } else if (tab === "forces") {
+    const values = (s: Station) =>
+      spatial ? [s.n, s.vy, s.vz, s.mx, s.my, s.mz] : [s.n, s.v, s.m];
+    headers = spatial
+      ? [
+          "Barra",
+          "x/L",
+          "N (kN)",
+          "Vy (kN)",
+          "Vz (kN)",
+          "Mx (kN·m)",
+          "My (kN·m)",
+          "Mz (kN·m)",
+        ]
+      : ["Barra", "x/L", "N (kN)", "V (kN)", "M (kN·m)"];
+    rows = Object.entries(result?.members ?? {}).flatMap(([id, stations]) =>
+      stations.map((s) => [
+        memberNames.get(id) ?? id,
+        s.t,
+        ...values(s).map((v) => v / 1000),
+      ]),
+    );
+  }
   return (
     <section className="results">
       <div className="results-heading">
