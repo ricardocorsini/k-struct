@@ -81,7 +81,7 @@ test("pórtico com casos vertical e vento Y salvos e consultados separadamente",
   const model = parseProject(await readFile(path, "utf8"));
   const [permanent, wind] = model.loadPatterns;
   const [vertical, lateral] = model.analysisCases;
-  expect(model.schemaVersion).toBe(32);
+  expect(model.schemaVersion).toBe(33);
   expect(permanent.uniform).toMatchObject([{ memberId: "B5", qz: -4500 }]);
   expect(permanent.nodal).toEqual([]);
   expect(wind.nodal).toMatchObject([{ nodeId: "N5", fy: 12000 }]);

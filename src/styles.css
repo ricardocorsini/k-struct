@@ -2908,3 +2908,19 @@ button.primary {
 .cut-preview .cut-trace { stroke-width: 4; }
 .cut-preview text { fill: currentColor; font-size: 12px; }
 @media(max-width: 650px) { .section-cuts-dialog .cut-layout { grid-template-columns: 1fr; } }
+
+.service-measures { width: min(900px, 94vw); }
+.service-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: end;
+}
+.service-fields label { display: grid; gap: 4px; max-width: 100%; }
+.service-fields select, .service-fields input { max-width: 30ch; }
+.service-reference { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; }
+.service-reference dt { font-weight: 600; }
+.service-reference dd { margin: 0; }
+.service-table { overflow-x: auto; }
+.service-table table { width: 100%; }
+.service-table th, .service-table td { text-align: start; padding: 6px; }

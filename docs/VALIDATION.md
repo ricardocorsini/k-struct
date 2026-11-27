@@ -799,3 +799,13 @@ OOFEM 3.0, revisão `214b161`. Os ensaios em `tests/section-cuts.test.ts` usam a
 A consulta bloqueia o total em coincidências físicas, em decomposições indeterminadas ou com parcela elementar ausente. Os testes cobrem a reabertura do corte salvo, reavaliação da geometria, tolerância em arestas internas, ponto tangente e corte vazio. O teste de interface usa uma saída de viga capturada do OOFEM.
 
 A recuperação de cortante por equilíbrio do tensor fletor também pode ser consultada no [código do DKT do OOFEM 3.0](https://github.com/oofem/oofem/blob/214b161ed3acb471f2d0104b004c37fd73bafaa2/src/sm/Elements/Plates/dkt.C).
+
+## KS-50 · medidas de serviço
+
+Uma consulta de deriva em X entre pontos com cotas de 0 e 3 m produz **12 mm** e **0,4%** para deslocamentos de 5 e 17 mm. Deslocamentos iguais produzem zero. Os pontos são os nós escolhidos, e seus deslocamentos globais incluem a rotação do diafragma quando aplicável. Dois nós na mesma cota retornam um diagnóstico de altura nula.
+
+Na consulta da corda em Z, deslocamentos de −2 e −6 mm nas faces dão −4 mm no meio do vão. Se a seção se deslocar −12 mm, a flecha relativa é −8 mm. Com o OOFEM 3.0, use a viga biapoiada de 6 m, E = 200 GPa, seção de 15 × 20 cm, qZ = −10 kN/m e recalques de −2 e −6 mm. Com oito segmentos, a flecha relativa central é −8,4375 mm pela expressão 5qL⁴/(384EI). Com três segmentos, a leitura no interior do elemento de 2 m é −8,416667 mm. A diferença em relação à solução analítica é a parcela quártica de módulo |q|h⁴/(384EI) omitida pela interpolação cúbica. As comparações admitem 5 × 10⁻¹¹ m na corda e 5 × 10⁻¹⁰ m na leitura da seção e na flecha relativa.
+
+O ensaio de envelope em X usa (5, 17) mm em C1 e (20, 12) mm em C2 para os nós A e B. A maior diferença é +12 mm em C1 e a menor é −8 mm em C2. Os máximos individuais 20 mm em A e 17 mm em B vêm de combinações distintas. Com as componentes Y de (8, 1) mm em C1 e (0, 10) mm em C2, o máximo é +10 mm em C2. O resultado identifica o eixo, a origem, o sinal e a revisão.
+
+Configure `OOFEM_BIN` conforme [OOFEM.md](OOFEM.md). Execute `npm test -- tests/service-measures.test.ts` e `npm run test:e2e -- results.spec.ts -g KS-50`. O teste do editor confere a conversão de mm para cm, a preservação dos resultados ao salvar a medida e a reabertura do arquivo com a medida pronta para nova análise.

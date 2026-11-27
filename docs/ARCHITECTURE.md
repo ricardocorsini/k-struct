@@ -6,7 +6,7 @@
 
 | Camada            | Responsabilidade                                                    | Local                        |
 | ----------------- | ------------------------------------------------------------------- | ---------------------------- |
-| Domínio           | Formato v32, migração v1 a v31, geometria, validação e histórico    | `src/domain`                 |
+| Domínio           | Formato v33, migração v1 a v32, geometria, validação e histórico    | `src/domain`                 |
 | Adaptador         | Discretização, IDs, unidades e sinais, leitura da saída             | `src/solver/oofem.ts`        |
 | Combinações       | Superposição de deslocamentos, reações e esforços estáticos         | `src/solver/combinations.ts` |
 | Envelopes         | Extremos por estação ou nó, combinação e componentes simultâneas    | `src/solver/envelopes.ts`    |
@@ -276,3 +276,10 @@ O esquema v32 persiste em `sectionCuts` o ponto do plano, a normal, o semiespaç
 A consulta usa as estações do caso efetivamente resolvido e integra os tensores de membrana e flexão de cada elemento na sua própria base. A regra de Gauss de dois pontos integra ao longo de cada trecho, inclusive o braço das forças. O cortante transversal de Kirchhoff parte da divergência do tensor de momentos. Seu integral e seu primeiro momento no traço são equilibrados com as ações externas e as reações do OOFEM. Nas duas lajes, as ações de contato da viga entram no equilíbrio individual de cada painel. Nas cascas dobradas, o sistema de equilíbrio projeta o resíduo sobre as normais dos painéis e as conormais dos traços. Uma decomposição singular impede o total. O momento fletor em torno da linha do corte continua vindo da integração do tensor elementar.
 
 O corpo retido inclui os pontos sobre o plano, dentro de 10⁻⁶ m. Em nó, salto ou aresta interna, a consulta usa a face adjacente ao lado descartado. Contato pontual é indicado como tangência. Coincidência com uma borda física, interface ou trecho de barra é indicada na prévia. Um trecho rígido com transferência nodal individual desconhecida também impede a soma. Os painéis tributários da KS-47 já contribuem pelas cargas das barras receptoras.
+
+
+## Medidas de serviço
+
+O formato v33 guarda as definições de consulta em `serviceMeasures`. A referência usa IDs dos nós ou da barra, eixo global e origem do resultado. Na corda, a posição é a fração do trecho deformável entre as faces i e j. Inverter a barra preserva a posição física pela transformação 1 − x/L. Se a barra, o nó ou a origem for removido, a definição fica disponível para correção. A migração de v32 preserva as definições existentes do projeto. Salvar uma medida altera somente os metadados de consulta e conserva os resultados da revisão em memória.
+
+As translações entre estações usam interpolação axial linear e transversal cúbica com as rotações físicas correspondentes. A diferença, a flecha relativa e a razão da deriva são lineares para referências fixas. O envelope busca os extremos das medidas completas, guardando as parcelas simultâneas e a origem governante.

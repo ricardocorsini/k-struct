@@ -25,7 +25,7 @@ O editor trabalha com projetos **planos XZ** ou **espaciais XYZ** e usa a mesma 
 - Em **Painel espacial → Orientação e rigidez**, gire os eixos a partir de AB e ajuste os fatores de membrana e de flexão. Em **Exibição → Eixos e faces dos painéis**, confira o sentido de 1, 2 e da normal +3. Nos resultados, escolha os eixos resistentes ou os geométricos para comparar esforços. [Cobertura de exemplo](examples/cobertura-direcional.kstruct.json)
 - Em **Modelo → Painel espacial → Carga superficial**, escolha pressão na normal +3 ou carga nos eixos globais X, Y ou Z. A intensidade pode ser uniforme, variar entre duas cotas globais Z ou ser informada em cada vértice. A vista mostra o sentido das cargas e os resultados exibem a força e o momento aplicados e as reações. Na laje horizontal, use **Propriedades → Configurar carga superficial**. [Parede com pressão hidrostática](examples/parede-pressao-hidrostatica.kstruct.json)
 - Em **Modelo → Painel de carga**, escolha três nós de um retângulo horizontal e a direção do vão. Confira a área, a força e a carga linear de cada viga antes de aplicar. A distribuição em duas direções usa bissetrizes a 45°. [Pórtico com painel de 6 × 4 m](examples/portico-painel-de-carga.kstruct.json)
-- Salvar e reabrir `.kstruct.json` no esquema v32, com migração dos projetos v1 a v31 na abertura. Desfazer e refazer até 50 edições e recuperar o último rascunho local.
+- Salvar e reabrir `.kstruct.json` no esquema v33, com migração dos projetos v1 a v32 na abertura. Desfazer e refazer até 50 edições e recuperar o último rascunho local.
 - Executar o OOFEM 3.0 integrado nos pacotes Windows e Linux, com diagnóstico, cancelamento e histórico local.
 - Resolver a estática linear com `Beam2d` ou `Beam3d`. Consultar os seis componentes de reações, deslocamentos e esforços no modelo espacial, além de deformada, diagramas, CSV e saída do OOFEM.
 - Invalidar resultados após alterações. Verificar conectividade, apoios de cada componente e equilíbrio global antes de apresentar resultados.
@@ -199,6 +199,12 @@ Para ler um diagrama de barra, abra **Consultar seção** em um caso ou combina�
 Para consultar um extremo nodal, selecione o envelope e abra **Reações de apoio** ou **Deslocamentos nodais**. Escolha o apoio ou nó, a componente e, em um apoio inclinado, o referencial. Cada linha mostra o mínimo ou máximo com sinal, a combinação que o produziu e as componentes simultâneas. **CSV** exporta a seleção nas unidades em uso. **Todos os apoios** inclui duas linhas por apoio, com a origem e os eixos de cada vetor. As reações são forças e momentos do apoio sobre a estrutura, aplicados no nó indicado. Para obter a ação da estrutura sobre a fundação, inverta o sinal das forças e dos momentos no mesmo ponto e referencial. [Ensaio dos envelopes nodais](docs/VALIDATION.md#ks-36--envelopes-nodais)
 
 Use `V` para selecionar, `N` para criar nó, `B` para criar barra, `L` para lançar laje, `Esc` para cancelar lançamento, `Delete` para excluir seleção, `Ctrl+Z` para desfazer, `Ctrl+Shift+Z` para refazer e `Ctrl+S` para salvar. Na elevação, scroll aproxima e afasta, botão central arrasta. A vista 3D orbita ao arrastar.
+
+### Medidas de serviço
+
+Em **Análise → Medidas de serviço**, escolha o tipo, os nós ou a barra e o eixo global. A diferença entre nós segue de A para B. A deriva usa o nó superior menos o inferior em X ou Y, dividido pela altura entre os dois. Para a flecha relativa, informe a posição entre as faces i e j do trecho deformável. A tabela mostra o deslocamento da seção, o da corda e a diferença. Um envelope indica as combinações que governam a medida completa.
+
+Use **Salvar medida** para guardar a definição e a origem no projeto. Ao reabrir, analise novamente os casos necessários. A escala visual da deformada pode ser alterada durante a inspeção. [Ensaios da KS-50](docs/VALIDATION.md#ks-50--medidas-de-serviço)
 
 ## Verificação
 

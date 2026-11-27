@@ -93,7 +93,7 @@ describe("peso próprio por padrão", () => {
       }),
     };
     const migrated = parseProject(JSON.stringify(old));
-    expect(migrated.schemaVersion).toBe(32);
+    expect(migrated.schemaVersion).toBe(33);
     expect(migrated.loadPatterns[0].uniform).toEqual(
       project.loadPatterns[0].uniform,
     );

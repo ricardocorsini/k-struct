@@ -58,7 +58,7 @@ describe("projeto versionado e edição", () => {
     };
     const p = parseProject(JSON.stringify(legacy));
     expect(p.mode).toBe("planar");
-    expect(p.schemaVersion).toBe(32);
+    expect(p.schemaVersion).toBe(33);
     expect(p.resultCombinations).toEqual([]);
     expect(p.resultEnvelopes).toEqual([]);
     expect(p.nodes.map((n) => n.id)).toEqual(["A", "B"]);

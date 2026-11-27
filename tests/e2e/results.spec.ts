@@ -286,7 +286,7 @@ test("a tabela bloqueia o colapso da barra e aceita trocar os extremos em um lot
 
   const positions = () =>
     page.evaluate(() =>
-      JSON.parse(localStorage.getItem("kstruct.draft.v32")!).nodes.map(
+      JSON.parse(localStorage.getItem("kstruct.draft.v33")!).nodes.map(
         (n: { id: string; x: number }) => [n.id, n.x],
       ),
     );
@@ -1284,7 +1284,7 @@ test("gera ELU/ELS, revisa exclusões e edições, salva e usa a combinação na
   await page.getByRole("checkbox", { name: "ELU · Q1", exact: true }).check();
   await button("Aplicar definições").click();
   const stored = () =>
-    page.evaluate(() => JSON.parse(localStorage.getItem("kstruct.draft.v32")!));
+    page.evaluate(() => JSON.parse(localStorage.getItem("kstruct.draft.v33")!));
   await expect
     .poll(async () => (await stored()).resultCombinations.length)
     .toBe(4);
@@ -1748,7 +1748,7 @@ test("salva e reabre o corte físico, consulta os dois lados e invalida após ed
   await expect(total.getByRole("cell").nth(2)).toHaveText("15");
   await dialog.getByRole("button", { name: "Fechar" }).click();
   const stored = await page.evaluate(
-    () => localStorage.getItem("kstruct.draft.v32")!,
+    () => localStorage.getItem("kstruct.draft.v33")!,
   );
   const project = parseProject(stored);
   expect(project.sectionCuts![0]).toMatchObject({
@@ -1766,4 +1766,83 @@ test("salva e reabre o corte físico, consulta os dois lados e invalida após ed
   await expect(dialog.getByText("Corte vazio.")).toBeVisible();
   await expect(dialog.getByText(/Analise os casos pendentes/)).toBeVisible();
   await expect(total).toHaveCount(0);
+});
+
+test("KS-50 · consulta a corda, muda a unidade e reabre a medida salva", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const executable = process.env.OOFEM_BIN;
+  if (executable)
+    await page.exposeFunction("solveQueueDeck", (deck: string) =>
+      runDeck(deck, executable),
+    );
+  await bridge(page, { realSolver: !!executable });
+  await page.goto("/");
+  const button = (name: string) =>
+    page.getByRole("button", { name, exact: true });
+  await page.getByRole("button", { name: /Viga de referência/ }).click();
+  await button("Analisar").click();
+  await expect(page.getByRole("status")).toContainText("Análise concluída");
+  const open = async () => {
+    await button("Análise").click();
+    await button("Medidas de serviço").click();
+  };
+  const dialog = page.getByRole("dialog", { name: "Medidas de serviço" });
+  const table = dialog.getByRole("table", { name: "Resultados da medida" });
+  const close = () => button("Fechar medidas").click();
+  await open();
+  const kind = dialog.getByRole("combobox", { name: "Tipo de medida" });
+  await kind.selectOption("drift");
+  await expect(dialog.getByRole("alert")).toContainText("Altura nula");
+  await expect(button("Salvar medida")).toBeDisabled();
+  await kind.selectOption("chord");
+  await dialog
+    .getByRole("combobox", { name: "Direção global" })
+    .selectOption("z");
+  const relative = table.getByRole("row").nth(1).getByRole("cell").last();
+  await expect(relative).toHaveText("-8,4375");
+  await expect(dialog).toContainText("Revisão");
+  await expect(dialog).toContainText("B1");
+  await expect(dialog).toContainText("6 m");
+  await dialog
+    .getByRole("textbox", { name: "Nome da medida" })
+    .fill("Flecha central");
+  await button("Salvar medida").click();
+  await expect(dialog.getByRole("status")).toContainText("Medida salva");
+  await expect(relative).toHaveText("-8,4375");
+  await close();
+  await button("Exibição").click();
+  await button("Unidades").click();
+  await page
+    .getByRole("dialog", { name: "Unidades" })
+    .getByRole("combobox", { name: "Deslocamentos", exact: true })
+    .selectOption("cm");
+  await button("Aplicar unidades").click();
+  await open();
+  await expect(table).toContainText("Relativo (cm)");
+  await expect(relative).toHaveText("-0,84375");
+  await close();
+
+  await page.evaluate(() => Object.assign(window, { isTauri: false }));
+  const download = page.waitForEvent("download");
+  await button("Salvar projeto").click();
+  const saved = await readFile((await (await download).path())!, "utf8");
+  expect(parseProject(saved).serviceMeasures).toMatchObject([
+    {
+      name: "Flecha central",
+      kind: "chord",
+      memberId: "V1",
+      axis: "z",
+      t: 0.5,
+      source: { kind: "case", id: "EL" },
+    },
+  ]);
+  await openProjectInBrowser(page, "medida.kstruct.json", saved);
+  await open();
+  await expect(
+    dialog.getByRole("textbox", { name: "Nome da medida" }),
+  ).toHaveValue("Flecha central");
+  await expect(dialog.getByRole("status")).toContainText("casos pendentes");
+  await expect(table).toHaveCount(0);
 });

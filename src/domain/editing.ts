@@ -173,6 +173,9 @@ export function reverseMember(p: Project, id: string) {
       );
     }
   }
+  for (const measure of p.serviceMeasures ?? [])
+    if (measure.kind === "chord" && measure.memberId === id)
+      measure.t = 1 - measure.t;
   // Mesh connections refer to physical node IDs and derive x/L from i and j.
   // Uniform loads are global, and groups and sections refer to the same ID.
 }

@@ -175,7 +175,7 @@ for (const mode of ["planar", "spatial"] as const) {
       page.getByRole("button", { name, exact: true });
     const draft = (): Promise<Project> =>
       page.evaluate(() =>
-        JSON.parse(localStorage.getItem("kstruct.draft.v32")!),
+        JSON.parse(localStorage.getItem("kstruct.draft.v33")!),
       );
     await button("Seleção e grupos").click();
     const dialog = page.getByRole("dialog", { name: "Seleção e grupos" });
@@ -264,7 +264,7 @@ test("cargas globais em lote equilibram o rolete no modelo de referência", asyn
   await expect
     .poll(() =>
       page.evaluate(() =>
-        JSON.parse(localStorage.getItem("kstruct.draft.v32")!),
+        JSON.parse(localStorage.getItem("kstruct.draft.v33")!),
       ),
     )
     .toEqual(manual);
@@ -325,7 +325,7 @@ test("o lote exibe e aplica forças, momentos e cargas nas unidades selecionadas
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const pattern = JSON.parse(localStorage.getItem("kstruct.draft.v32")!)
+        const pattern = JSON.parse(localStorage.getItem("kstruct.draft.v33")!)
           .loadPatterns[0];
         return [
           pattern.uniform[0].qz,

@@ -1,3 +1,4 @@
+import { ServiceMeasuresDialog } from "./components/ServiceMeasuresDialog";
 import { SectionCutsDialog } from "./components/SectionCutsDialog";
 import { LoadPanelDialog, newLoadPanel } from "./components/LoadPanelDialog";
 import {
@@ -184,6 +185,7 @@ const initialPlanes = (levelId = ""): Record<PlanePanel, PlaneChoice> => ({
 const initial = () => {
   try {
     const cached =
+      localStorage.getItem("kstruct.draft.v33") ??
       localStorage.getItem("kstruct.draft.v32") ??
       localStorage.getItem("kstruct.draft.v31") ??
       localStorage.getItem("kstruct.draft.v30") ??
@@ -223,15 +225,22 @@ const initial = () => {
   return createProject();
 };
 function sameAnalysisModel(a: Project, b: Project) {
-  return (
-    !!(a.sectionCuts || b.sectionCuts) &&
-    JSON.stringify({ ...a, sectionCuts: undefined }) ===
-      JSON.stringify({ ...b, sectionCuts: undefined })
-  );
+  if (
+    !(a.sectionCuts || b.sectionCuts || a.serviceMeasures || b.serviceMeasures)
+  )
+    return false;
+  const analysis = (p: Project) =>
+    JSON.stringify({
+      ...p,
+      sectionCuts: undefined,
+      serviceMeasures: undefined,
+    });
+  return analysis(a) === analysis(b);
 }
 export default function App() {
   const { units } = useUnits();
   const [showCuts, setShowCuts] = useState(false);
+  const [showMeasures, setShowMeasures] = useState(false);
   const [showUnits, setShowUnits] = useState(false);
   const [history, dispatch] = useReducer(historyReducer, undefined, () => ({
     past: [],
@@ -605,7 +614,7 @@ export default function App() {
     dirty = serialized !== saved;
   useEffect(() => {
     try {
-      localStorage.setItem("kstruct.draft.v32", serialized);
+      localStorage.setItem("kstruct.draft.v33", serialized);
     } catch {
       setMessage(
         "Não foi possível guardar o rascunho automático. Salve o projeto em arquivo.",
@@ -900,6 +909,7 @@ export default function App() {
     const key = (e: KeyboardEvent) => {
       if (
         showCuts ||
+        showMeasures ||
         loadEditor ||
         memberLoadDraft ||
         launchDialog === "materials" ||
@@ -1719,6 +1729,17 @@ Equilíbrio global verificado. ${outcome.result.panels ? "Consulte os deslocamen
                 <span>Cortes da estrutura</span>
               </button>
             </div>
+            {(p.nodes.length > 1 || !!p.serviceMeasures?.length) && (
+              <div className="ribbon-group">
+                <button
+                  className="tool-button"
+                  onClick={() => setShowMeasures(true)}
+                >
+                  <Ruler size={21} />
+                  <span>Medidas de serviço</span>
+                </button>
+              </div>
+            )}
             <div className="ribbon-group">
               <button
                 className="tool-button"
@@ -2735,6 +2756,23 @@ Equilíbrio global verificado. ${outcome.result.panels ? "Consulte os deslocamen
           }
           edit={edit}
           close={() => setShowCuts(false)}
+        />
+      )}
+      {showMeasures && (
+        <ServiceMeasuresDialog
+          project={p}
+          cases={caseResults}
+          initialSource={
+            envelope
+              ? { kind: "envelope", id: envelope.id }
+              : combination
+                ? { kind: "combination", id: combination.id }
+                : { kind: "case", id: caseId }
+          }
+          selectedMember={selection.find((v) => v.kind === "member")?.id}
+          revision={modelRevision.current}
+          edit={edit}
+          close={() => setShowMeasures(false)}
         />
       )}
       {showRunHistory && (

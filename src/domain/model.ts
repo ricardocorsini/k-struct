@@ -830,11 +830,45 @@ const sectionCutSchema = z.strictObject({
   retained: z.enum(["negative", "positive"]),
   datum: panelPoint,
 });
-export const projectSchema = z.strictObject({
+const projectV32 = z.strictObject({
   ...projectV31.shape,
   schemaVersion: z.literal(32),
   sectionCuts: z.array(sectionCutSchema).max(100).optional(),
 });
+const serviceSource = z.strictObject({
+  kind: z.enum(["case", "combination", "envelope"]),
+  id,
+});
+const serviceBase = { id, name: text, source: serviceSource };
+const serviceMeasureSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    ...serviceBase,
+    kind: z.literal("difference"),
+    a: id,
+    b: id,
+    axis: z.enum(coordinates),
+  }),
+  z.strictObject({
+    ...serviceBase,
+    kind: z.literal("drift"),
+    a: id,
+    b: id,
+    axis: z.enum(["x", "y"]),
+  }),
+  z.strictObject({
+    ...serviceBase,
+    kind: z.literal("chord"),
+    memberId: id,
+    t: finite.min(0).max(1),
+    axis: z.enum(coordinates),
+  }),
+]);
+export const projectSchema = projectV32.extend({
+  schemaVersion: z.literal(33),
+  serviceMeasures: z.array(serviceMeasureSchema).max(100).optional(),
+});
+export type ServiceMeasure = z.infer<typeof serviceMeasureSchema>;
+export type ServiceSource = z.infer<typeof serviceSource>;
 export type SectionCut = z.infer<typeof sectionCutSchema>;
 export type LoadPanel = z.infer<typeof loadPanelSchema>;
 export type TributaryLoad = z.infer<typeof tributaryLoadSchema>;
@@ -933,7 +967,7 @@ function defaultGuides(): Project["guides"] {
 export function createProject(mode: Project["mode"] = "planar"): Project {
   return {
     format: "kstruct",
-    schemaVersion: 32,
+    schemaVersion: 33,
     meshConnections: [],
     selectionGroups: [],
     id: uid(),
@@ -1442,6 +1476,15 @@ export function parseProject(source: string): Project {
     const old = projectV31.safeParse(value);
     if (old.success) value = { ...old.data, schemaVersion: 32 };
   }
+  if (
+    value &&
+    typeof value === "object" &&
+    "schemaVersion" in value &&
+    value.schemaVersion === 32
+  ) {
+    const old = projectV32.safeParse(value);
+    if (old.success) value = { ...old.data, schemaVersion: 33 };
+  }
   const parsed = projectSchema.safeParse(value);
   if (!parsed.success) {
     const panelFactorIssue = parsed.error.issues.find(
@@ -1517,6 +1560,7 @@ export function referenceErrors(p: Project): string[] {
   errors.push(...panelModelErrors(p), ...loadPanelErrors(p));
   for (const list of [
     p.sectionCuts ?? [],
+    p.serviceMeasures ?? [],
     p.loadPanels ?? [],
     p.surfacePanels ?? [],
     p.nodes,
