@@ -200,6 +200,12 @@ Para consultar um extremo nodal, selecione o envelope e abra **Reações de apoi
 
 Use `V` para selecionar, `N` para criar nó, `B` para criar barra, `L` para lançar laje, `Esc` para cancelar lançamento, `Delete` para excluir seleção, `Ctrl+Z` para desfazer, `Ctrl+Shift+Z` para refazer e `Ctrl+S` para salvar. Na elevação, scroll aproxima e afasta, botão central arrasta. A vista 3D orbita ao arrastar.
 
+### Comparação de mapas de áreas
+
+Depois de analisar uma laje ou um painel espacial, abra **Comparar mapas de áreas** nos resultados. Escolha o painel físico, dois casos e uma componente. Clique em um ponto de qualquer mapa para consultar a mesma posição nos dois. Os limites automáticos cobrem os dois campos. Use **Fixar limites** para aplicar outros limites às duas vistas.
+
+Para comparar malhas, use **Guardar malha do mapa A**, feche a comparação, mude as subdivisões e analise novamente. Ao reabrir, a malha guardada e a atual podem ser consultadas na mesma posição. A referência fica em memória enquanto o modelo físico e as cargas forem compatíveis. [Ensaios da KS-49](docs/VALIDATION.md#ks-49--comparação-de-mapas-de-áreas)
+
 ## Verificação
 
 ```sh

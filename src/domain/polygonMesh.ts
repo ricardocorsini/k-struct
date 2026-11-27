@@ -269,55 +269,50 @@ export function meshPolygon(
   };
 }
 
+// Coordinates in the element's interpolation basis, with a dimensionless
+// boundary tolerance shared by point probes and the slab sample.
+export function areaWeights(points: XY[], point: XY): number[] | null {
+  const [a, b, c] = points;
+  if (points.length === 4) {
+    // QDKT rectangles list (+,+), (-,+), (-,-), (+,-).
+    const u = (point.x - c.x) / (a.x - c.x);
+    const v = (point.y - c.y) / (a.y - c.y);
+    if (u >= -1e-12 && u <= 1 + 1e-12 && v >= -1e-12 && v <= 1 + 1e-12)
+      return [u * v, (1 - u) * v, (1 - u) * (1 - v), u * (1 - v)];
+    return null;
+  }
+  const area = cross2(a, b, c);
+  const weights = [
+    cross2(b, c, point) / area,
+    cross2(c, a, point) / area,
+    cross2(a, b, point) / area,
+  ];
+  return weights.every((w) => w >= -1e-12) ? weights : null;
+}
+
 export function materialSample(mesh: SlabMesh, centroid: XY) {
   let nearest:
     | { point: XY; face: number[]; weights: number[]; relocated: boolean }
     | undefined;
   let distance = Infinity;
   for (const { nodes: face } of mesh.elements) {
-    const [a, b, c] = face.map((i) => mesh.nodes[i - 1]);
-    if (face.length === 4) {
-      // QDKT rectangles list (+,+), (-,+), (-,-), (+,-).
-      const u = (centroid.x - c.x) / (a.x - c.x),
-        v = (centroid.y - c.y) / (a.y - c.y);
-      if (u >= -1e-12 && u <= 1 + 1e-12 && v >= -1e-12 && v <= 1 + 1e-12)
-        return {
-          point: centroid,
-          face,
-          weights: [u * v, (1 - u) * v, (1 - u) * (1 - v), u * (1 - v)],
-          relocated: false,
-        };
-      const point = { x: c.x + (a.x - c.x) / 2, y: c.y + (a.y - c.y) / 2 },
-        gap = Math.hypot(point.x - centroid.x, point.y - centroid.y);
-      if (gap < distance) {
-        nearest = {
-          point,
-          face,
-          weights: [0.25, 0.25, 0.25, 0.25],
-          relocated: true,
-        };
-        distance = gap;
-      }
-      continue;
-    }
-    const area = cross2(a, b, c);
-    const weights = [
-      cross2(b, c, centroid) / area,
-      cross2(c, a, centroid) / area,
-      cross2(a, b, centroid) / area,
-    ];
-    if (weights.every((w) => w >= -1e-12))
-      return { point: centroid, face, weights, relocated: false };
-    const point = {
-      x: a.x + (b.x - a.x + (c.x - a.x)) / 3,
-      y: a.y + (b.y - a.y + (c.y - a.y)) / 3,
-    };
+    const points = face.map((i) => mesh.nodes[i - 1]);
+    const weights = areaWeights(points, centroid);
+    if (weights) return { point: centroid, face, weights, relocated: false };
+    const [a, b, c] = points;
+    const point =
+      face.length === 4
+        ? { x: c.x + (a.x - c.x) / 2, y: c.y + (a.y - c.y) / 2 }
+        : {
+            x: a.x + (b.x - a.x + (c.x - a.x)) / 3,
+            y: a.y + (b.y - a.y + (c.y - a.y)) / 3,
+          };
     const gap = Math.hypot(point.x - centroid.x, point.y - centroid.y);
     if (gap < distance) {
       nearest = {
         point,
         face,
-        weights: [1 / 3, 1 / 3, 1 / 3],
+        weights: face.map(() => 1 / face.length),
         relocated: true,
       };
       distance = gap;

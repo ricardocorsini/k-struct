@@ -2908,3 +2908,31 @@ button.primary {
 .cut-preview .cut-trace { stroke-width: 4; }
 .cut-preview text { fill: currentColor; font-size: 12px; }
 @media(max-width: 650px) { .section-cuts-dialog .cut-layout { grid-template-columns: 1fr; } }
+
+.area-comparison-trigger { padding: 4px 12px; }
+.area-comparison-trigger button { min-height: 30px; padding-inline: 10px; }
+.area-comparison { width: min(1060px, 94vw); }
+.area-comparison-controls, .area-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: end;
+  margin: 10px 0;
+}
+.area-comparison-controls label { display: grid; gap: 4px; }
+.area-comparison-controls input { width: 13ch; }
+.area-map-legend { align-items: center; padding: 8px; background: var(--surface-raised); }
+.area-map-legend i, .area-swatch {
+  display: inline-block; width: 14px; height: 14px;
+  margin-inline-end: 5px; vertical-align: middle;
+  border: 1px solid var(--line-strong);
+}
+.area-map-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.area-map-grid section { min-width: 0; border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px; }
+.area-map-grid select { max-width: 75%; }
+.area-map-grid canvas { display: block; width: 100%; background: var(--surface-view); cursor: crosshair; }
+.area-map-grid table { width: 100%; margin-block: 6px; }
+.area-map-grid th, .area-map-grid td { text-align: start; padding: 3px 5px; }
+@media (max-width: 620px) {
+  .area-map-grid { grid-template-columns: 1fr; }
+}

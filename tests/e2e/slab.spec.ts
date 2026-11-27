@@ -1,3 +1,4 @@
+import { foldedPanels } from "../fixtures/spatial-panels";
 import { jointedSlabs } from "../fixtures/jointed-slabs";
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
@@ -1222,4 +1223,182 @@ test("KS-47 · lança o painel de carga, confere as parcelas, reabre e analisa o
   await expect(page.getByLabel("Visualização dos resultados")).toHaveValue(
     "deformed",
   );
+});
+
+test("KS-49 · compara casos e malhas com uma legenda no mesmo ponto", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const project = slabBenchmarkProject();
+  Object.assign(project.slabs[0], {
+    formulation: "qdkt",
+    divisionsX: 8,
+    divisionsY: 6,
+  });
+  project.analysisCases.push({
+    ...project.analysisCases[0],
+    id: "P2",
+    name: "Pressão dobrada",
+    factors: [{ patternId: "G", factor: 2 }],
+  });
+  if (executable) await plateBridge(page);
+  await page.goto("/");
+  await openProjectInBrowser(
+    page,
+    "comparacao.kstruct.json",
+    serializeProject(project),
+  );
+  const button = (name: string) =>
+    page.getByRole("button", { name, exact: true });
+  const open = () => button("Comparar mapas de áreas").click();
+  const close = () => button("Fechar comparação de mapas").click();
+  const dialog = page.getByRole("dialog", {
+    name: "Comparação de mapas de áreas",
+  });
+  const a = dialog.getByRole("region", { name: "Mapa A", exact: true });
+  const b = dialog.getByRole("region", { name: "Mapa B", exact: true });
+  const legend = dialog.getByLabel("Legenda comum");
+  const probe = async () => {
+    await dialog.getByLabel("X local da comparação").fill("1,875");
+    await dialog.getByLabel("Y local da comparação").fill("1,375");
+  };
+  const read = (side: typeof a) =>
+    side.getByRole("row").nth(1).getByRole("cell").nth(2);
+  await open();
+  await expect(a).toContainText("Resultado indisponível");
+  await expect(b).toContainText("Pressão dobrada · Resultado indisponível");
+  await close();
+  if (!executable) return;
+
+  await page.evaluate(() => sessionStorage.setItem("slab-ipc", "enabled"));
+  await page.reload();
+  const solve = async (caseId: string) => {
+    await page.getByLabel("Caso estático").selectOption(caseId);
+    await button("Analisar").click();
+    await page.waitForFunction(
+      () => !!(window as unknown as SlabTestWindow).finishSlabAnalysis,
+    );
+    await page.evaluate(() =>
+      (window as unknown as SlabTestWindow).finishSlabAnalysis!(),
+    );
+    await expect(button("Analisar")).toBeEnabled();
+  };
+  await solve("EL");
+  await open();
+  await probe();
+  await expect(a.getByRole("img")).toBeVisible();
+  await expect(b).toContainText("Resultado indisponível");
+  await close();
+
+  await solve("P2");
+  await open();
+  await dialog.getByLabel("Resultado A").selectOption("EL");
+  await dialog.getByLabel("Resultado B").selectOption("P2");
+  await probe();
+  await expect(legend).toContainText("Escala automática");
+  await dialog.getByLabel("Mínimo (mm)").fill("-3");
+  await dialog.getByLabel("Máximo (mm)").fill("0");
+  await button("Fixar limites").click();
+  await expect(legend).toContainText("Escala fixada");
+  const v = async (side: typeof a) =>
+    Number((await read(side).innerText()).replace(" mm", "").replace(",", "."));
+  expect(await v(b)).toBeCloseTo(2 * (await v(a)), 4);
+  await dialog.getByLabel("Resultado B").selectOption("EL");
+  await expect(read(b)).toHaveText(await read(a).innerText());
+  expect(await read(b).locator("i").getAttribute("style")).toBe(
+    await read(a).locator("i").getAttribute("style"),
+  );
+  await button("Guardar malha do mapa A").click();
+  await close();
+
+  await page
+    .locator(".explorer")
+    .getByRole("button", { name: "L1", exact: true })
+    .click();
+  await button("Configurar malha da laje").click();
+  const mesh = page.getByRole("dialog", { name: "Malha da laje" });
+  await mesh.getByLabel("Geração da malha").selectOption("target");
+  await mesh.getByLabel("Tamanho-alvo global").fill("0.25");
+  await button("Aplicar malha").click();
+  await open();
+  await expect(a).toContainText("48 elementos");
+  await expect(b).toContainText("Resultado indisponível");
+  await close();
+  await solve("EL");
+  await open();
+  await probe();
+  await expect(a).toContainText("48 elementos");
+  await expect(b).toContainText("192 elementos");
+  await expect(
+    a.getByRole("row").nth(1).getByRole("cell").nth(1),
+  ).not.toHaveText(
+    await b.getByRole("row").nth(1).getByRole("cell").nth(1).innerText(),
+  );
+  await close();
+
+  await button("Exibição").click();
+  await button("Unidades").click();
+  const units = page.getByRole("dialog", { name: "Unidades", exact: true });
+  await units
+    .getByRole("combobox", { name: "Deslocamentos", exact: true })
+    .selectOption("cm");
+  await button("Aplicar unidades").click();
+  await open();
+  await probe();
+  await expect(legend).toContainText("Flecha UZ (cm)");
+  await expect(read(a)).toContainText("cm");
+  await close();
+
+  const pressure = page.getByLabel("Pressão pZ");
+  await pressure.fill("-4");
+  await pressure.press("Enter");
+  await open();
+  await expect(
+    dialog.getByRole("option", { name: /Malha guardada/ }),
+  ).toHaveCount(0);
+  await expect(a).toContainText("Resultado indisponível");
+});
+
+test("KS-49 · identifica as leituras de cada painel na dobra", async ({
+  page,
+}) => {
+  test.skip(!executable, "Configure OOFEM_BIN para analisar os painéis.");
+  test.setTimeout(90_000);
+  const project = foldedPanels();
+  await plateBridge(page);
+  await page.goto("/");
+  await openProjectInBrowser(
+    page,
+    "dobra.kstruct.json",
+    serializeProject(project),
+  );
+  await page.evaluate(() => sessionStorage.setItem("slab-ipc", "enabled"));
+  await page.reload();
+  await page.getByRole("button", { name: "Analisar", exact: true }).click();
+  await page.waitForFunction(
+    () => !!(window as unknown as SlabTestWindow).finishSlabAnalysis,
+    undefined,
+    { timeout: 10000 },
+  );
+  await page.evaluate(() =>
+    (window as unknown as SlabTestWindow).finishSlabAnalysis!(),
+  );
+  await expect(
+    page.getByRole("table", { name: "Extremos locais do painel" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Comparar mapas de áreas", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Comparação de mapas de áreas",
+  });
+  await dialog.getByLabel("Componente").selectOption("mxx");
+  await dialog.getByLabel("Recuperação").selectOption("element");
+  await dialog.getByLabel("X local da comparação").fill("3");
+  await dialog.getByLabel("Y local da comparação").fill("0,6");
+  const table = dialog.getByRole("table", { name: "Leitura no mapa A" });
+  await expect(table).toContainText("Parede");
+  await expect(table).toContainText("Laje · referencial próprio");
+  await dialog.getByLabel("X local da comparação").fill("2,8");
+  await expect(table).not.toContainText("Laje · referencial próprio");
 });

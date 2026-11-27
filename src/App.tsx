@@ -1,4 +1,6 @@
 import { SectionCutsDialog } from "./components/SectionCutsDialog";
+import AreaComparison from "./components/AreaComparison";
+import { comparisonModelKey } from "./solver/areaMaps";
 import { LoadPanelDialog, newLoadPanel } from "./components/LoadPanelDialog";
 import {
   SurfacePanelDialog,
@@ -415,6 +417,10 @@ export default function App() {
     p.loadPatterns.find((pattern) => pattern.id === preferredPatternId)?.id ??
     p.loadPatterns[0].id;
   const caseResult = caseResults.get(caseId) ?? null;
+  const areaComparisonKey = useMemo(
+    () => (hasPanels || p.slabs.length ? comparisonModelKey(p) : ""),
+    [p, hasPanels],
+  );
   const slabResult =
     caseResult?.floor?.panels.find((v) => v.slabId === slab?.id) ??
     caseResult?.slab ??
@@ -2445,6 +2451,17 @@ Equilíbrio global verificado. ${outcome.result.panels ? "Consulte os deslocamen
                     : "x/L vai da face i (0) à face j (1) do trecho deformável. N positivo em tração. M positivo sagente em barras horizontais orientadas +X."}
               </div>
             )
+          )}
+          {areaComparisonKey && (
+            <div className="area-comparison-trigger">
+              <AreaComparison
+                key={areaComparisonKey}
+                project={p}
+                cases={caseResults}
+                caseId={caseId}
+                areaId={slab?.id}
+              />
+            </div>
           )}
           {hasPanels ? (
             <SurfacePanelResults

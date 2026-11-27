@@ -266,6 +266,7 @@ export function readPanels(
     axes: g.materialAxes,
     geometryAxes: g.axes,
     angleDeg: g.panel.angleDeg ?? 0,
+    elements: [] as { number: number; nodes: number[] }[],
     nodes: [] as { id: number; point: Point3; local: Point3; global: Point3 }[],
     samples: [] as {
       element: number;
@@ -324,6 +325,7 @@ export function readPanels(
     }));
   const byTriangle = mesh.elements.map((e, index) => {
     const panel = panels[e.panel];
+    panel.elements.push({ number: index + 1, nodes: e.nodes });
     return Array.from({ length: 4 }, (_, gp) => {
       const fields: LocalSample = {},
         geometricFields: LocalSample =

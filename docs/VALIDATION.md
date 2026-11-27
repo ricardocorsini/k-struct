@@ -799,3 +799,15 @@ OOFEM 3.0, revisão `214b161`. Os ensaios em `tests/section-cuts.test.ts` usam a
 A consulta bloqueia o total em coincidências físicas, em decomposições indeterminadas ou com parcela elementar ausente. Os testes cobrem a reabertura do corte salvo, reavaliação da geometria, tolerância em arestas internas, ponto tangente e corte vazio. O teste de interface usa uma saída de viga capturada do OOFEM.
 
 A recuperação de cortante por equilíbrio do tensor fletor também pode ser consultada no [código do DKT do OOFEM 3.0](https://github.com/oofem/oofem/blob/214b161ed3acb471f2d0104b004c37fd73bafaa2/src/sm/Elements/Plates/dkt.C).
+
+## KS-49 · comparação de mapas de áreas
+
+Na laje QDKT de 4 × 3 m, espessura de 0,10 m, E = 30 GPa e ν = 0,20, analise pressões uniformes de −5 e −10 kN/m² em dois casos. Em **Comparar mapas de áreas**, escolha UZ e consulte X = 1,875 m e Y = 1,375 m na malha de 8 × 6. O segundo caso dobra UZ dentro de 5 × 10⁻¹¹ m. A consulta bilinear confere com a soma independente dos quatro deslocamentos nodais ponderados pelos pesos 1/16, 3/16, 3/16 e 9/16 (tolerância de 5 × 10⁻¹³ m).
+
+Guarde a malha de 8 × 6 e refine para 16 × 12. O mesmo ponto tem uma referência de elemento diferente e a diferença de UZ fica abaixo de 0,03 mm. A flecha central da malha refinada fica a menos de 0,002 mm da série de Navier. Em escala fixada de −3 a 0 mm, selecione o mesmo caso nos dois mapas e compare o valor e a cor da leitura. Alterar a unidade de deslocamento converte a apresentação.
+
+Em uma laje DKT de 5 × 4 m com furo de (1, 1) a (2, 2) m, consulte (1,5, 1,5) m e (3,25, 2,35) m após analisar duas malhas. O primeiro ponto fica sem leitura e o segundo permanece no material. Em um painel de membrana de 3 × 1,20 m, gire os eixos geométricos para (1, 2, 2)/3 e (2, 1, −2)/3. Aplique tração de +100 kN/m na borda livre. A leitura N11 em (1,82, 0,53) m segue a referência de +100 kN/m com tolerância de 12 N/m, que inclui a impressão dos tensores no OOFEM. Na dobra parede–laje, os dois lados da ligação são identificados em seus próprios referenciais.
+
+A recuperação elementar usa valores médios por elemento. A suavizada usa interpolação bilinear nas QDKT e baricêntrica nos triângulos, com tolerância de 10⁻¹² nas coordenadas paramétricas para incluir as bordas. Nos painéis espaciais, as médias de esforços são ponderadas pela área nos nós, separadamente em cada painel. Nas lajes, os momentos nodais vêm da extrapolação dos pontos de integração. O desenho suavizado usa subcélulas para representar as cores, e a tabela interpola no ponto informado. A projeção na face vizinha admite distância de até 10⁻⁶ m do plano.
+
+Com o OOFEM 3.0 configurado, execute `npm test -- tests/area-maps.test.ts` e `npm run test:e2e -- slab.spec.ts -g KS-49`. Os ensaios também cobrem uma escala constante, valores ausentes, resultados de casos ainda não analisados e descarte da referência após mudança de carga.
