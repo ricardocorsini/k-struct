@@ -299,6 +299,14 @@ Execute o teste abaixo com o solver fixado pelo projeto para repetir os três ca
 OOFEM_BIN=/caminho/absoluto/oofem npm test -- tests/pinned-truss.integration.test.ts
 ```
 
+### Articulação em lote no KStruct
+
+Selecione uma ou mais barras e, em **Propriedades**, clique em **Articular as duas extremidades**. Em XZ, o comando libera Ry em i e j. Em XYZ, libera Ry e Rz nas duas pontas, libera Rx em i e fixa Rx em j. Os graus de translação conservam as ligações existentes. Aplicar o comando a uma seleção conta como uma edição no histórico.
+
+O teste `tests/member-hinges.integration.test.ts` aplica o mesmo comando às barras dos modelos de referência e executa o arquivo exportado pelo KStruct. Na treliça plana, confira 5 kN em cada apoio, 3,75 kN de tração no banzo, 6,25 kN de compressão nas diagonais e UZ de C de −0,2375 mm. Sob carga transversal do banzo, confira 30 kN em cada apoio, cortantes de +30 e −30 kN nas pontas, momento de 45 kN·m e flecha de −33,75 mm no centro para malhas de 2 e 8 segmentos. Na ligação espacial, articule apenas BC. Confira 12,772926 kN de compressão em BC, momentos nulos e as rotações de B da referência independente.
+
+A comparação com a saída impressa do OOFEM admite 0,5 N ou 0,5 N·m para forças e momentos, 5 × 10⁻¹¹ m para UZ de C, 5 × 10⁻⁹ m para a flecha do banzo e 5 × 10⁻¹⁰ m ou rad para os deslocamentos de B no pórtico espacial. Execute `npm test -- tests/member-hinges.integration.test.ts` e `npm run test:e2e -- member-connections.spec.ts` com `OOFEM_BIN` configurado. O teste de interface cobre seleção múltipla, um passo de desfazer/refazer, reabertura e as reações verticais da treliça.
+
 ## KS-23 · excentricidades de inserção e trechos rígidos
 
 Os ensaios usam o OOFEM 3.0 fixado pelo projeto. As coordenadas dos nós e as excentricidades estão em metros. Nos ensaios axiais, o balanço tem 6 m, E = 200 GPa e A = 0,03 m².

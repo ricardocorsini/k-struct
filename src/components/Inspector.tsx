@@ -43,7 +43,7 @@ import {
   localComponents,
   tolerance,
 } from "../domain/geometry";
-import { reverseMember } from "../domain/editing";
+import { hingeMemberEnds, reverseMember } from "../domain/editing";
 import { setPrescribedMotion } from "../domain/prescribedMotions";
 import { setRigidSupport, setSpring } from "../domain/supports";
 import {
@@ -579,6 +579,24 @@ export default function Inspector({
   const selectedNodes = new Set(
     selection.filter((s) => s.kind === "node").map((s) => s.id),
   );
+  const selectedMembers = new Set(
+    selection.filter(({ kind }) => kind === "member").map(({ id }) => id),
+  );
+  const hingeEnds = (
+    <>
+      <button
+        onClick={() => edit((draft) => hingeMemberEnds(draft, selectedMembers))}
+      >
+        Articular as duas extremidades
+      </button>
+      {spatial && (
+        <p className="help">
+          Libera Ry e Rz nas duas pontas e Rx somente em i. A torção fica rígida
+          em j.
+        </p>
+      )}
+    </>
+  );
   const applyRestraints = (fixed: boolean) =>
     edit((p) => {
       for (const n of p.nodes) {
@@ -639,11 +657,11 @@ export default function Inspector({
         {selection.length > 1 && (
           <>
             <p className="help">
-              {selectedNodes.size} nós ·{" "}
-              {selection.filter(({ kind }) => kind === "member").length} barras
+              {selectedNodes.size} nós · {selectedMembers.size} barras
               {selection.some(({ kind }) => kind === "slab") && " · 1 laje"}
             </p>
             {selectedNodes.size > 0 && supportPresets}
+            {selectedMembers.size > 0 && hingeEnds}
             <BatchAssignPanel
               key={JSON.stringify([
                 p.mode,
@@ -908,6 +926,7 @@ export default function Inspector({
               globais.
             </p>
             <h4>Ligações nas extremidades</h4>
+            {hingeEnds}
             <p className="help">
               Escolha o vínculo de cada componente nos eixos locais da barra.
             </p>

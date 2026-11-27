@@ -84,7 +84,7 @@ jobs:
       - name: Browser benchmarks with real OOFEM
         env:
           PLAYWRIGHT_CHANNEL: chrome
-        run: OOFEM_BIN="$GITHUB_WORKSPACE/.oofem-dist/build/bin/oofem" npm run test:e2e -- spatial.spec.ts load-cases.spec.ts slab.spec.ts mesh-connections.spec.ts materials.spec.ts sections.spec.ts member-axes.spec.ts member-offsets.spec.ts member-stiffness.spec.ts inclined-supports.spec.ts diaphragm.spec.ts nodal-springs.spec.ts foundation.spec.ts member-point-loads.spec.ts member-distributed-loads.spec.ts prescribed-motions.spec.ts self-weight.spec.ts thermal-loads.spec.ts batch-assign.spec.ts units.spec.ts units-views-integration.spec.ts results.spec.ts
+        run: OOFEM_BIN="$GITHUB_WORKSPACE/.oofem-dist/build/bin/oofem" npm run test:e2e -- spatial.spec.ts load-cases.spec.ts slab.spec.ts mesh-connections.spec.ts materials.spec.ts sections.spec.ts member-axes.spec.ts member-offsets.spec.ts member-stiffness.spec.ts member-connections.spec.ts inclined-supports.spec.ts diaphragm.spec.ts nodal-springs.spec.ts foundation.spec.ts member-point-loads.spec.ts member-distributed-loads.spec.ts prescribed-motions.spec.ts self-weight.spec.ts thermal-loads.spec.ts batch-assign.spec.ts units.spec.ts units-views-integration.spec.ts results.spec.ts
       - uses: dtolnay/rust-toolchain@stable
       - name: Native process integration with real OOFEM
         env:

@@ -36,13 +36,43 @@ import {
 import {
   addPoint,
   appendMember,
+  defaultEndConnection,
+  rigidConnectionComponent,
   nextName,
   uid,
+  type EndConnection,
   type Member,
   type Project,
   type RectangleSlab,
   type PolygonSlab,
 } from "./model";
+
+export function hingeMemberEnds(
+  project: Project,
+  memberIds: ReadonlySet<string>,
+) {
+  const freeRotation = { kind: "free" } as const;
+  for (const member of project.members) {
+    if (!memberIds.has(member.id)) continue;
+    const i: EndConnection = {
+      ...(member.connectionI ?? defaultEndConnection()),
+      ry: freeRotation,
+    };
+    const j: EndConnection = {
+      ...(member.connectionJ ?? defaultEndConnection()),
+      ry: freeRotation,
+    };
+    if (project.mode === "spatial") {
+      i.rz = freeRotation;
+      j.rz = freeRotation;
+      // Retain a torsional reference through j for the member.
+      i.rx = freeRotation;
+      j.rx = rigidConnectionComponent();
+    }
+    member.connectionI = i;
+    member.connectionJ = j;
+  }
+}
 
 export function inspectNodeCoordinateChanges(
   project: Project,
